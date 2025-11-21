@@ -1,14 +1,14 @@
 # parameters
-ARG REPO_NAME="<REPO_NAME_HERE>"
-ARG DESCRIPTION="<DESCRIPTION_HERE>"
-ARG MAINTAINER="<YOUR_FULL_NAME> (<YOUR_EMAIL_ADDRESS>)"
+ARG REPO_NAME="quackimap"
+ARG DESCRIPTION="SLAM and mapping package for Duckiebots"
+ARG MAINTAINER="Jaydan Aladro, Arielle, Dalil"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
 # ==================================================>
 # ==> Do not change the code below this line
 ARG ARCH
-ARG DISTRO=daffy
+ARG DISTRO=ente
 ARG DOCKER_REGISTRY=docker.io
 ARG BASE_IMAGE=dt-ros-commons
 ARG BASE_TAG=${DISTRO}-${ARCH}

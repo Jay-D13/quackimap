@@ -1,10 +1,10 @@
 docs_config_version: v1
 
 # CONFIGURE THESE TO MATCH YOUR PROJECT:
-project: "REPOSITORY_NAME_HERE"
+# project: "quackimap"
+# author: "Jaydan Aladro, Arielle, Dalil"
+# version: "ente"
 copyright: "Duckietown"
-author: "YOUR_NAME_HERE"
-version: "ente"
 custom_sections:  [
   "Configuration",
   "Subscribers",
