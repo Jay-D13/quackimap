@@ -5,6 +5,7 @@
 
   <group ns="$(arg veh)">
     <node pkg="$(arg pkg_name)" type="$(arg node_name).py" name="$(arg node_name)" output="screen" required="true">
+      <param name="veh" value="$(arg veh)" />
       <param name="image_topic" value="camera_node/image/compressed" />
       <param name="odom_topic"  value="velocity_to_pose_node/pose" />
       <param name="camera_info_topic" value="camera_node/camera_info" />
