@@ -1,3 +1,37 @@
+# 1. Create virtual bot
+
+```bash
+dts duckiebot virtual create --type duckiebot --configuration DB21J vquarck
+```
+```bash
+dts duckiebot virtual start vquarck
+```
+
+# 2. Attach to matrix
+
+```bash
+dts matrix attach vquarck map_0/vehicle_0
+```
+
+# 3. Build
+
+```bash
+# build once (or when you change code)
+dts devel build -f
+```
+# 4. Run
+run SLAM launcher against vquarck
+
+```bash
+dts devel run -R vquarck
+```
+Is launchers/default.sh by default, or specify another launcher with -L
+
+```bash
+dts devel run -R vquarck -L <your-launcher-name>
+```
+
+
 # Template: template-ros
 
 This template provides a boilerplate repository

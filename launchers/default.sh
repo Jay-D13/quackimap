@@ -2,9 +2,6 @@
 
 source /environment.sh
 
-
-source /environment.sh
-
 source /opt/ros/noetic/setup.bash
 source /code/devel/setup.bash --extend
 
