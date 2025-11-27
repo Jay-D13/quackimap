@@ -1,0 +1,199 @@
+Panels:
+  - Class: rviz/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /SLAM Landmarks1
+        - /SLAM Pose1
+      Splitter Ratio: 0.5
+    Tree Height: 400
+  - Class: rviz/Selection
+    Name: Selection
+  - Class: rviz/Tool Properties
+    Expanded:
+      - /2D Pose Estimate1
+      - /2D Nav Goal1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz/Time
+    Experimental: false
+    Name: Time
+    SyncMode: 0
+    SyncSource: Detection Image
+Preferences:
+  PromptSaveOnExit: true
+Toolbars:
+  toolButtonStyle: 2
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.5
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: map
+      Value: true
+
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Name: TF
+      Show Axes: true
+      Show Names: true
+      Value: true
+
+    - Alpha: 1
+      Class: rviz/Axes
+      Enabled: true
+      Length: 0.3
+      Name: Map Frame
+      Radius: 0.03
+      Reference Frame: map
+      Value: true
+
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /agent/slam_landmarks
+      Name: SLAM Landmarks
+      Namespaces:
+        landmark_covariance: true
+        landmark_labels: true
+        landmark_points: true
+        robot: true
+      Queue Size: 100
+      Value: true
+
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 25; 255; 0
+      Enabled: true
+      Head Diameter: 0.3
+      Head Length: 0.2
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.03
+      Name: SLAM Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.03
+      Shaft Diameter: 0.1
+      Shaft Length: 0.1
+      Topic: /agent/slam_path
+      Value: true
+
+    - Alpha: 1
+      Axes Length: 0.1
+      Axes Radius: 0.01
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.07
+      Head Radius: 0.03
+      Name: SLAM Pose
+      Queue Size: 10
+      Shaft Length: 0.23
+      Shaft Radius: 0.01
+      Shape: Arrow
+      Topic: /agent/slam_pose
+      Value: true
+
+    - Alpha: 0.5
+      Class: rviz/PoseWithCovariance
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.07
+      Head Radius: 0.03
+      Name: SLAM Pose Covariance
+      Queue Size: 10
+      Shaft Length: 0.1
+      Shaft Radius: 0.01
+      Shape: Arrow
+      Topic: /agent/slam_pose_cov
+      Value: true
+
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /agent/slam_debug_image
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Detection Image
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Unreliable: false
+      Value: true
+
+    - Alpha: 1
+      Axes Length: 0.15
+      Axes Radius: 0.015
+      Class: rviz/Pose
+      Color: 0; 170; 255
+      Enabled: true
+      Head Length: 0.1
+      Head Radius: 0.04
+      Name: Ground Truth Pose
+      Queue Size: 10
+      Shaft Length: 0.3
+      Shaft Radius: 0.015
+      Shape: Arrow
+      Topic: /agent/gt_pose_visualizer_node/gt_pose
+      Value: true
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz/TopDownOrtho
+      Enable Stereo Rendering:
+        Value: false
+      Name: TopDownOrtho
+      Near Clip Distance: 0.01
+      Scale: 100
+      Target Frame: <Fixed Frame>
+      Value: TopDownOrtho (rviz)
+      X: 0
+      Y: 0
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 800
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd00000001000000010000015e000002b4fc0200000002fb000000100044006900730070006c0061007900730100000027000002b4000000c800fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007300000001cf000000a60000005c00ffffff000003dc000002b400000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Views:
+    collapsed: true
+  Width: 1200
+  X: 100
+  Y: 100

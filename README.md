@@ -7,36 +7,39 @@ dts duckiebot virtual create --type duckiebot --configuration DB21J vquarck
 dts duckiebot virtual start vquarck
 ```
 
-# 2. Build
+# 2. Attach and run the matrix
+
+```bash
+dts matrix attach vquarck map_0/vehicle_0
+dts matrix run --standalone --embedded --map sandbox
+```
+
+# 3. Build
 
 ```bash
 # build once (or when you change code)
 dts devel build -f
 ```
-# 3. Run
+# 4. Run
 run SLAM launcher against vquarck
 
 ```bash
 dts devel run -R vquarck
 ```
-Is launchers/default.sh by default, or specify another launcher with -L
+It's launchers/default.sh by default, or specify another launcher with -L
 
 ```bash
 dts devel run -R vquarck -L <your-launcher-name>
 ```
 
-# 4. VNC
+# 5. VNC
 
 ```bash
 dts gui --vnc vquarck
 ```
 
-# 5. Attach to matrix
 
-```bash
-dts matrix attach vquarck map_0/vehicle_0
-```
-
+TODO change sandbox to our map with landmarks
 <!-- 
 rostopic list
 rostopic echo /vquarck/slam_pose

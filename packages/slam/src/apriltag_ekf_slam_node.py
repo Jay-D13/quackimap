@@ -2,13 +2,14 @@
 import rospy
 import numpy as np
 import cv2
+import tf2_ros
+from geometry_msgs.msg import TransformStamped
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, Point, PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import ColorRGBA
 
 from dt_apriltags import Detector
 from slam.include.slam.ekf_slam import EkfSlam2D
@@ -71,6 +72,9 @@ class AprilTagEkfSlamNode(object):
         # Debug image publisher - shows detected AprilTags
         self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
         self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
+
+        # TF broadcaster for RViz visualization
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
         # Stats for logging
         self.detection_count = 0
@@ -245,6 +249,7 @@ class AprilTagEkfSlamNode(object):
         self.publish_pose_with_covariance()
         self.publish_landmarks()
         self.publish_path()
+        self.publish_tf()
 
     def publish_pose(self):
         ps = PoseStamped()
@@ -457,6 +462,27 @@ class AprilTagEkfSlamNode(object):
         
         self.path.header.stamp = rospy.Time.now()
         self.path_pub.publish(self.path)
+
+    def publish_tf(self):
+        """Publish TF transform from map to base_link for RViz visualization."""
+        x = self.slam.x
+
+        t = TransformStamped()
+        t.header.stamp = rospy.Time.now()
+        t.header.frame_id = "map"
+        t.child_frame_id = "base_link"
+
+        t.transform.translation.x = float(x[0, 0])
+        t.transform.translation.y = float(x[1, 0])
+        t.transform.translation.z = 0.0
+
+        yaw = float(x[2, 0])
+        t.transform.rotation.x = 0.0
+        t.transform.rotation.y = 0.0
+        t.transform.rotation.z = np.sin(yaw / 2.0)
+        t.transform.rotation.w = np.cos(yaw / 2.0)
+
+        self.tf_broadcaster.sendTransform(t)
 
 
 def main():

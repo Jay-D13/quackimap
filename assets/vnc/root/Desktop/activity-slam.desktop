@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SLAM-vis
+Comment=MOOC - SLAM
+Exec=/usr/bin/launch-slam-rviz.sh
+Icon=/root/.icons/duckietown.png
+Terminal=true
+X-KeepTerminal=true
+StartupNotify=true
