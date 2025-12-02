@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.4
 # parameters
-ARG EXERCISE_NAME="ekf-localization"
-ARG DESCRIPTION="Localizing with april tags and an encoder"
-ARG MAINTAINER="Liam P "
+ARG EXERCISE_NAME="lx-kinematics-odometry"
+ARG DESCRIPTION="Learning Experience about kinematics, inverse kinematics, and odometry"
+ARG MAINTAINER="Liam"
 
 # ==================================================>
 # ==> Do not change the code below this line
@@ -34,13 +34,13 @@ ARG TARGETVARIANT
 RUN dt-build-env-check "${EXERCISE_NAME}" "${MAINTAINER}" "${DESCRIPTION}"
 
 # install apt dependencies
-COPY ./dependencies-apt.txt "/tmp/"
+COPY --from=recipe ./dependencies-apt.txt "/tmp/"
 RUN dt-apt-install /tmp/dependencies-apt.txt
 
 # install python3 dependencies
 ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
-COPY ./dependencies-py3.* "/tmp/"
+COPY --from=recipe ./dependencies-py3.* "/tmp/"
 RUN python3 -m pip install -r /tmp/dependencies-py3.txt
 
 # store module metadata
@@ -60,3 +60,15 @@ LABEL org.duckietown.label.module.type="exercise-vnc" \
 CMD ["dt-launcher-vnc"]
 # <== Do not change the code above this line
 # <==================================================
+
+# copy stuff for the user directory
+COPY assets/vnc/root/Desktop/. /root/Desktop/
+# COPY assets/vnc/root/Documents/. /root/Documents/
+COPY assets/vnc/root/icons/. /root/.icons/
+
+# copy custom binaries
+COPY assets/vnc/usr/bin/. /usr/bin/
+RUN chmod +x /usr/bin/launch-slam-rviz.sh
+
+# copy RVIZ configuration
+COPY assets/vnc/opt/ros/noetic/share/rviz/. /opt/ros/noetic/share/rviz/

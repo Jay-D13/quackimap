@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(gt_pose_visualizer_node)
+project(gt_pose_visualizer)
 
 find_package(catkin REQUIRED COMPONENTS
   rospy

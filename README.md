@@ -10,8 +10,13 @@ dts duckiebot virtual start vquarck
 # 2. Attach and run the matrix
 
 ```bash
+dts matrix run --standalone --embedded --map loop
+```
+
+In another terminal, attach to the matrix:
+
+```bash
 dts matrix attach vquarck map_0/vehicle_0
-dts matrix run --standalone --embedded --map sandbox
 ```
 
 # 3. Build
@@ -34,8 +39,10 @@ dts devel run -R vquarck -L <your-launcher-name>
 
 # 5. VNC
 
+In another tab/terminal, build the VNC image and run it:
 ```bash
-dts gui --vnc vquarck
+# dts gui --vnc vquarck <- will build the default image from `dt-gui-tools`
+dts devel build --file Dockerfile.vnc
 ```
 
 

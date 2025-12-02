@@ -36,6 +36,7 @@ ARG TARGETVARIANT
 RUN dt-build-env-check "${REPO_NAME}" "${MAINTAINER}" "${DESCRIPTION}"
 
 # define/create repository path
+ARG LAUNCH_DIR="/launch"
 ARG REPO_PATH="${CATKIN_WS_DIR}/src/${REPO_NAME}"
 ARG LAUNCH_PATH="${LAUNCH_DIR}/${REPO_NAME}"
 RUN mkdir -p "${REPO_PATH}" "${LAUNCH_PATH}"
@@ -92,3 +93,16 @@ LABEL org.duckietown.label.module.type="${REPO_NAME}" \
     org.duckietown.label.maintainer="${MAINTAINER}"
 # <== Do not change the code above this line
 # <==================================================
+
+# # copy stuff for the user directory
+# COPY assets/vnc/root/Desktop/. /root/Desktop/
+# # COPY assets/vnc/root/Documents/. /root/Documents/
+# COPY assets/vnc/root/icons/. /root/.icons/
+
+# # copy custom binaries
+# COPY assets/vnc/usr/bin/. /usr/bin/
+# RUN chmod +x /usr/bin/launch-slam-rviz.sh
+
+# # copy RVIZ configuration
+# COPY assets/vnc/opt/ros/noetic/share/rviz/. /opt/ros/noetic/share/rviz/
+
