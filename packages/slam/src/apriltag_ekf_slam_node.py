@@ -3,7 +3,7 @@ import rospy
 import numpy as np
 import cv2
 import tf2_ros
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Pose
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
@@ -21,6 +21,7 @@ class AprilTagEkfSlamNode(object):
         self.veh = rospy.get_param("~veh", "")
         self.image_topic = rospy.get_param("~image_topic", "/camera/compressed")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        self.gt_topic = rospy.get_param("~gt_topic", "/gt_pose")  # Ground truth topic (Pose type)
 
         self.camera_params = None
         self.camera_info_topic = rospy.get_param(
@@ -41,6 +42,18 @@ class AprilTagEkfSlamNode(object):
         # Path history for visualization
         self.path = Path()
         self.path.header.frame_id = "map"
+        
+        # Ground truth path history
+        self.gt_path = Path()
+        self.gt_path.header.frame_id = "map"
+
+        # Store last velocities for odometry message
+        self.last_v = 0.0
+        self.last_w = 0.0
+        
+        # Ground truth tracking for velocity estimation
+        self.last_gt_pose = None
+        self.last_gt_time = None
 
         # AprilTag detector (tag36h11 is what Duckietown uses by default)
         self.detector = Detector(
@@ -62,12 +75,26 @@ class AprilTagEkfSlamNode(object):
         self.odom_sub = rospy.Subscriber(
             self.odom_topic, Odometry, self.odom_cb, queue_size=50
         )
+        
+        # Ground truth subscriber - accepts Pose messages (from gt_pose_visualizer_node)
+        self.gt_sub = rospy.Subscriber(
+            self.gt_topic, Pose, self.gt_pose_cb, queue_size=10
+        )
 
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
         self.pose_cov_pub = rospy.Publisher("slam_pose_cov", PoseWithCovarianceStamped, queue_size=10)
         self.lm_pub = rospy.Publisher("slam_landmarks", MarkerArray, queue_size=10)
         self.path_pub = rospy.Publisher("slam_path", Path, queue_size=10)
+        
+        # Odometry publisher for SLAM estimate (for RVIZ Axes visualization)
+        self.slam_odom_pub = rospy.Publisher("slam_odom", Odometry, queue_size=10)
+        
+        # Odometry publisher for ground truth (for RVIZ Axes visualization)
+        self.gt_odom_pub = rospy.Publisher("gt_odom", Odometry, queue_size=10)
+        
+        # Ground truth path publisher
+        self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
         
         # Debug image publisher - shows detected AprilTags
         self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
@@ -79,10 +106,12 @@ class AprilTagEkfSlamNode(object):
         # Stats for logging
         self.detection_count = 0
         self.last_detection_time = None
+        self.odom_count = 0
 
         rospy.loginfo("AprilTag EKF-SLAM node initialized")
         rospy.loginfo(f"  Image topic: {self.image_topic}")
         rospy.loginfo(f"  Odom topic: {self.odom_topic}")
+        rospy.loginfo(f"  GT topic: {self.gt_topic}")
         rospy.loginfo(f"  Tag size: {self.tag_size}m")
 
     def camera_info_cb(self, msg: CameraInfo):
@@ -97,20 +126,94 @@ class AprilTagEkfSlamNode(object):
         rospy.loginfo(f"Got camera intrinsics fx={fx:.2f}, fy={fy:.2f}, cx={cx:.2f}, cy={cy:.2f}")
         self.camera_info_sub.unregister()
 
+    # ---------- GROUND TRUTH CALLBACK (Pose message) ----------
+    def gt_pose_cb(self, msg: Pose):
+        """
+        Handle ground truth pose from gt_pose_visualizer_node.
+        Converts Pose to Odometry for RVIZ visualization.
+        """
+        current_time = rospy.Time.now()
+        
+        # Convert Pose to Odometry for RVIZ
+        gt_odom = Odometry()
+        gt_odom.header.stamp = current_time
+        gt_odom.header.frame_id = "map"
+        gt_odom.child_frame_id = "base_link_gt"
+        
+        gt_odom.pose.pose = msg
+        
+        # Estimate velocity from pose changes (optional, for twist field)
+        if self.last_gt_pose is not None and self.last_gt_time is not None:
+            dt = (current_time - self.last_gt_time).to_sec()
+            if dt > 0.001:
+                dx = msg.position.x - self.last_gt_pose.position.x
+                dy = msg.position.y - self.last_gt_pose.position.y
+                
+                # Get yaw from quaternion
+                qz = msg.orientation.z
+                qw = msg.orientation.w
+                yaw = 2.0 * np.arctan2(qz, qw)
+                
+                qz_prev = self.last_gt_pose.orientation.z
+                qw_prev = self.last_gt_pose.orientation.w
+                yaw_prev = 2.0 * np.arctan2(qz_prev, qw_prev)
+                
+                # Linear velocity in robot frame
+                dist = np.sqrt(dx**2 + dy**2)
+                gt_odom.twist.twist.linear.x = dist / dt
+                
+                # Angular velocity
+                dyaw = yaw - yaw_prev
+                # Wrap angle
+                while dyaw > np.pi:
+                    dyaw -= 2*np.pi
+                while dyaw < -np.pi:
+                    dyaw += 2*np.pi
+                gt_odom.twist.twist.angular.z = dyaw / dt
+        
+        self.last_gt_pose = msg
+        self.last_gt_time = current_time
+        
+        self.gt_odom_pub.publish(gt_odom)
+        
+        # Add to ground truth path
+        ps = PoseStamped()
+        ps.header.stamp = current_time
+        ps.header.frame_id = "map"
+        ps.pose = msg
+        
+        self.gt_path.poses.append(ps)
+        if len(self.gt_path.poses) > 1000:
+            self.gt_path.poses = self.gt_path.poses[-1000:]
+        
+        self.gt_path.header.stamp = current_time
+        self.gt_path_pub.publish(self.gt_path)
+
     # ---------- ODOMETRY -> PREDICT ----------
     def odom_cb(self, msg: Odometry):
         v = msg.twist.twist.linear.x
         w = msg.twist.twist.angular.z
+        
+        # Store for odometry message
+        self.last_v = v
+        self.last_w = w
 
         t = msg.header.stamp.to_sec()
         if self.last_odom_time is None:
             self.last_odom_time = t
+            rospy.loginfo("SLAM: First odometry message received")
             return
 
         dt = t - self.last_odom_time
         self.last_odom_time = t
         if dt <= 0.0:
             return
+
+        # Debug: log velocities periodically
+        self.odom_count += 1
+        if self.odom_count % 50 == 0:
+            rospy.loginfo(f"SLAM Predict: v={v:.4f} m/s, w={np.rad2deg(w):.2f} deg/s, dt={dt:.3f}s")
+            rospy.loginfo(f"SLAM State: x={self.slam.x[0,0]:.3f}, y={self.slam.x[1,0]:.3f}, theta={np.rad2deg(self.slam.x[2,0]):.1f}deg")
 
         self.slam.predict(v, w, dt)
         self.publish_all()
@@ -247,6 +350,7 @@ class AprilTagEkfSlamNode(object):
         """Publish all visualization data."""
         self.publish_pose()
         self.publish_pose_with_covariance()
+        self.publish_slam_odometry()
         self.publish_landmarks()
         self.publish_path()
         self.publish_tf()
@@ -268,6 +372,52 @@ class AprilTagEkfSlamNode(object):
         ps.pose.orientation.w = qw
 
         self.pose_pub.publish(ps)
+
+    def publish_slam_odometry(self):
+        """
+        Publish SLAM estimated pose as Odometry message for RVIZ visualization.
+        This allows using the rviz/Odometry display with Axes shape.
+        """
+        odom = Odometry()
+        odom.header.stamp = rospy.Time.now()
+        odom.header.frame_id = "map"
+        odom.child_frame_id = "base_link"
+
+        x = self.slam.x
+        odom.pose.pose.position.x = float(x[0, 0])
+        odom.pose.pose.position.y = float(x[1, 0])
+        odom.pose.pose.position.z = 0.0
+
+        yaw = float(x[2, 0])
+        odom.pose.pose.orientation.x = 0.0
+        odom.pose.pose.orientation.y = 0.0
+        odom.pose.pose.orientation.z = np.sin(yaw / 2.0)
+        odom.pose.pose.orientation.w = np.cos(yaw / 2.0)
+
+        # Add covariance from EKF (6x6 row-major)
+        # ROS covariance order: x, y, z, roll, pitch, yaw
+        cov = np.zeros(36)
+        P = self.slam.P
+        cov[0] = P[0, 0]   # xx
+        cov[1] = P[0, 1]   # xy
+        cov[5] = P[0, 2]   # x-yaw
+        cov[6] = P[1, 0]   # yx
+        cov[7] = P[1, 1]   # yy
+        cov[11] = P[1, 2]  # y-yaw
+        cov[30] = P[2, 0]  # yaw-x
+        cov[31] = P[2, 1]  # yaw-y
+        cov[35] = P[2, 2]  # yaw-yaw
+        odom.pose.covariance = cov.tolist()
+
+        # Add velocity information
+        odom.twist.twist.linear.x = self.last_v
+        odom.twist.twist.linear.y = 0.0
+        odom.twist.twist.linear.z = 0.0
+        odom.twist.twist.angular.x = 0.0
+        odom.twist.twist.angular.y = 0.0
+        odom.twist.twist.angular.z = self.last_w
+
+        self.slam_odom_pub.publish(odom)
 
     def publish_pose_with_covariance(self):
         """Publish pose with covariance for visualization in RViz."""
