@@ -5,10 +5,23 @@ ROBOT_NAME="${1:-vquarck}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSETS_DIR="${SCRIPT_DIR}/assets/vnc"
 
+# Cleanup function
+cleanup() {
+    echo ""
+    echo "Stopping VNC container..."
+    if [ ! -z "$CONTAINER" ]; then
+        docker stop "$CONTAINER" > /dev/null 2>&1
+    fi
+    exit 0
+}
+
+# Set up trap to catch Ctrl+C
+trap cleanup SIGINT SIGTERM
+
 echo "Launching VNC for ${ROBOT_NAME}..."
 
-dts gui --vnc "$ROBOT_NAME" &
-VNC_PID=$!
+# Run in detached mode to avoid TTY issues
+dts gui --vnc "$ROBOT_NAME" > /dev/null 2>&1 &
 
 echo "Waiting for VNC container to start..."
 sleep 5
@@ -41,4 +54,9 @@ echo ""
 echo "Open http://localhost:8087 in your browser."
 echo "Press Ctrl+C to stop the VNC."
 
-wait $VNC_PID
+# Keep the script running and monitor the container
+while docker ps -q --filter id="$CONTAINER" | grep -q .; do
+    sleep 1
+done
+
+echo "VNC container has stopped."
