@@ -42,7 +42,7 @@ dts devel run -R vquarck -L <your-launcher-name>
 In another tab/terminal, build the VNC image and run it:
 ```bash
 # dts gui --vnc vquarck <- will build the default image from `dt-gui-tools`
-dts devel build --file Dockerfile.vnc
+./launch-vnc.sh vquarck
 ```
 
 
