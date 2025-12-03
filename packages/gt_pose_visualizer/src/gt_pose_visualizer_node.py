@@ -26,26 +26,29 @@ class GTPoseVisualizerNode(DTROS):
 
         # create publishers
         self._odom_pub = rospy.Publisher(
-            "~gt_odom",
+            "~ground_truth/odom",
             Odometry,
             queue_size=1,
             dt_topic_type=TopicType.DRIVER,
             dt_help="The ground truth odometry of the robot from the Duckiematrix",
         )
 
-        rospy.Timer(rospy.Duration(0.1), self.publish_pose)
+        rospy.Timer(rospy.Duration(0.02), self.publish_pose)
         
         rospy.loginfo("GT Pose Visualizer initialized")
 
     def publish_pose(self, event=None):
 
         pose = self.robot.pose.capture()
+        #print(pose)
 
         if pose is None:
             return
 
-        current_time = rospy.Time.now()
+        #Given as an epoch in seconds, convert to rospy Time
+        current_time= pose["header"]["timestamp"]
         
+
         # Build Pose message
         pose_msg = Pose()
         pose_msg.position.x = pose["position"]["x"]
@@ -59,15 +62,15 @@ class GTPoseVisualizerNode(DTROS):
         # self._pub.publish(pose_msg)
         
         odom_msg = Odometry()
-        odom_msg.header.stamp = current_time
+        odom_msg.header.stamp = rospy.Time.from_sec(current_time)
         odom_msg.header.frame_id = "map"
-        odom_msg.child_frame_id = "base_link_gt"
+        odom_msg.child_frame_id = "base_link"
         
         odom_msg.pose.pose = pose_msg
         
         # Estimate velocities from pose difference
         if self.last_pose is not None and self.last_time is not None:
-            dt = (current_time - self.last_time).to_sec()
+            dt = (current_time - self.last_time)
             if dt > 0.001:
                 # Position difference
                 dx = pose_msg.position.x - self.last_pose.position.x
@@ -82,9 +85,16 @@ class GTPoseVisualizerNode(DTROS):
                 qw_prev = self.last_pose.orientation.w
                 yaw_prev = 2.0 * np.arctan2(qz_prev, qw_prev)
                 
-                # Linear velocity (distance / time)
-                dist = np.sqrt(dx**2 + dy**2)
-                odom_msg.twist.twist.linear.x = dist / dt
+                # Linear velocity in map frame
+                vx_map = dx / dt
+                vy_map = dy / dt
+                
+                # Project velocity from map frame to body frame (base_link)
+                # v_body = R^T * v_map
+                # This correctly handles forward (+) and backward (-) motion
+                v_body_x = vx_map * np.cos(yaw) + vy_map * np.sin(yaw)
+                
+                odom_msg.twist.twist.linear.x = v_body_x
                 
                 # Angular velocity
                 dyaw = yaw - yaw_prev
