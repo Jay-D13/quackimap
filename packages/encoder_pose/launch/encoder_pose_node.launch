@@ -4,7 +4,7 @@
 
   <group ns="$(arg veh)">
     <node pkg="$(arg pkg_name)" type="encoder_pose_node.py" name="encoder_pose_node" output="screen">
-      <remap from="~pose" to="kinematics_node/odom"/>
+      <param name="odom_topic"  value="encoder_pose_node/odom" />
     </node>
   </group>
 </launch>
