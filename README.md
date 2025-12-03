@@ -9,8 +9,14 @@ dts duckiebot virtual start vquarck
 
 # 2. Attach and run the matrix
 
+The duckiematrix seems to require absolute paths to the maps, so from the root of this repo, start py assigning a variable
+
 ```bash
-dts matrix run --standalone --embedded --map loop
+MAP=$(pwd)/assets/duckiematrix/map
+```
+Then append the custom map you wish to use within this repo. For now only the loop map is available:
+```bash
+dts matrix run --standalone --map "$MAP/loop"
 ```
 
 In another terminal, attach to the matrix:

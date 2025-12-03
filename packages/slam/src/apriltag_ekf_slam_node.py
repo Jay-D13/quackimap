@@ -21,8 +21,8 @@ class AprilTagEkfSlamNode(object):
         self.veh = rospy.get_param("~veh", "")
         self.image_topic = rospy.get_param("~image_topic", "/camera/compressed")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
-        self.gt_topic = rospy.get_param("~gt_topic", "/gt_pose")  # Ground truth topic (Pose type)
-
+        self.gt_topic = rospy.get_param("~gt_topic", "/ground_truth/odom")  # Ground truth topic (Pose type)
+        self.use_gt = rospy.get_param("~use_ground_truth", True)
         self.camera_params = None
         self.camera_info_topic = rospy.get_param(
             "~camera_info_topic", "/camera_node/camera_info"
@@ -77,9 +77,10 @@ class AprilTagEkfSlamNode(object):
         )
         
         # Ground truth subscriber - accepts Pose messages (from gt_pose_visualizer_node)
-        self.gt_sub = rospy.Subscriber(
-            self.gt_topic, Pose, self.gt_pose_cb, queue_size=10
-        )
+        if self.use_gt:
+            self.gt_sub = rospy.Subscriber(
+                self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
+            )
 
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
@@ -89,10 +90,12 @@ class AprilTagEkfSlamNode(object):
         
         # Odometry publisher for SLAM estimate (for RVIZ Axes visualization)
         self.slam_odom_pub = rospy.Publisher("slam_odom", Odometry, queue_size=10)
-        
+
+        """         
         # Odometry publisher for ground truth (for RVIZ Axes visualization)
         self.gt_odom_pub = rospy.Publisher("gt_odom", Odometry, queue_size=10)
-        
+        """ 
+
         # Ground truth path publisher
         self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
         
@@ -127,7 +130,7 @@ class AprilTagEkfSlamNode(object):
         self.camera_info_sub.unregister()
 
     # ---------- GROUND TRUTH CALLBACK (Pose message) ----------
-    def gt_pose_cb(self, msg: Pose):
+    def gt_pose_cb(self, msg: Odometry):
         """
         Handle ground truth pose from gt_pose_visualizer_node.
         Converts Pose to Odometry for RVIZ visualization.

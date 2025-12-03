@@ -48,6 +48,8 @@ class EncoderPoseNode(DTROS):
         # Init the parameters
         self.resetParameters()
 
+        self.odom_topic = rospy.get_param("~odom_topic", "encoder_pose_node/odom")
+
         # nominal R and L, you may change these if needed:
 
         self.R = 0.0318  # meters, default value of wheel radius
@@ -63,15 +65,14 @@ class EncoderPoseNode(DTROS):
         right_encoder_topic = f"/{self.veh}/right_wheel_encoder_driver_node/tick"
         rospy.Subscriber(right_encoder_topic, WheelEncoderStamped, self.cbRightEncoder)
 
+        
         # Odometry publisher (using relative name so launch file remap works)
         self.db_estimated_pose = rospy.Publisher(
-            "pose", Odometry, queue_size=1, dt_topic_type=TopicType.LOCALIZATION
+            self.odom_topic, Odometry, queue_size=1, dt_topic_type=TopicType.LOCALIZATION
         )
 
-
-
         self.log("Initialized.")
-        rospy.Timer(rospy.Duration(1.0/2.0), self.posePublisher)
+        rospy.Timer(rospy.Duration(0.05), self.posePublisher)
 
     def resetParameters(self):
         # Add the node parameters to the parameters dictionary
@@ -185,7 +186,7 @@ class EncoderPoseNode(DTROS):
                 # Linear and angular velocities
                 v = d_center / dt  # linear velocity (m/s)
                 w = (d_right - d_left) / (self.baseline * dt)  # angular velocity (rad/s)
-
+                """                 
                 # self.logging to screen for debugging purposes
                 self.log("              ODOMETRY             ")
                 # self.log(f"Baseline : {self.baseline}   R: {self.R}")
@@ -202,7 +203,7 @@ class EncoderPoseNode(DTROS):
                 self.log(f"Prev Ticks left : {self.left_tick_prev}   Prev Ticks right : {self.right_tick_prev}")
                 # self.log(
                 #     f"Prev integral error : {self.prev_int}")
-
+                """
                 # Calculate new odometry only when new data from encoders arrives
                 self.delta_phi_left = 0
                 self.delta_phi_right = 0
