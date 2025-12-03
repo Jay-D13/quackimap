@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-    <name>gt_pose_visualizer_node</name>
+    <name>gt_pose_visualizer</name>
     <version>2.0.0</version>
     <description>Takes poses from the Duckiematrix and published them to ROS as poses that
     can be visualized or plotted</description>

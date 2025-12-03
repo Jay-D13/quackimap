@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(gt_pose_visualizer)
+project(encoder_pose)
+
 
 find_package(catkin REQUIRED COMPONENTS
-  rospy
-  duckietown_msgs # Every duckietown packages should use this.
+  duckietown_msgs
+  geometry_msgs
   sensor_msgs
+  rospy
   std_msgs
 )
+
 
 catkin_package()
 

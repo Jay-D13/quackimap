@@ -1,0 +1,10 @@
+<launch>
+  <arg name="veh" doc="Name of vehicle. ex: vquarck"/>
+  <arg name="pkg_name" value="encoder_pose"/>
+
+  <group ns="$(arg veh)">
+    <node pkg="$(arg pkg_name)" type="encoder_pose_node.py" name="encoder_pose_node" output="screen">
+      <remap from="~pose" to="kinematics_node/odom"/>
+    </node>
+  </group>
+</launch>
