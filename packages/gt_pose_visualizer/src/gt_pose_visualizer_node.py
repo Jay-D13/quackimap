@@ -16,8 +16,8 @@ class GTPoseVisualizerNode(DTROS):
         self._robot_name = get_robot_name()
 
         # Here we use the Duckietown SDK to connect directly to the entity in the duckiematrix to get the
-        # robot pose
-        self.robot: DB21J = DB21J("map/vehicle_0", simulated=True)
+        # robot pose. Pointing to 'state' node because pose is located at .../state/pose
+        self.robot: DB21J = DB21J("map_0/vehicle_0/state", simulated=True)
         self.robot.pose.start()
 
         # Previous pose for velocity estimation
@@ -40,6 +40,9 @@ class GTPoseVisualizerNode(DTROS):
     def publish_pose(self, event=None):
 
         pose = self.robot.pose.capture()
+
+        if pose is None:
+            return
 
         current_time = rospy.Time.now()
         
