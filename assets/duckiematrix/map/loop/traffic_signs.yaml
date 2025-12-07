@@ -44,6 +44,14 @@ traffic_signs:
     id: 30
     type: sign_stop
     family: 36h11
+  map_0/sign_stop_40:
+    id: 40
+    type: sign_stop
+    family: 36h11
+  map_0/sign_stop_41:
+    id: 41
+    type: sign_stop
+    family: 36h11
   map_0/sign_right_T_intersect_9:
     id: 9
     type: sign_right_T_intersect
