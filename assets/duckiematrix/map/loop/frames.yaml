@@ -507,3 +507,23 @@ frames:
       roll: 0.0
       pitch: 0.0
       yaw: 0.0
+  map_0/sign_stop_40:
+    relative_to: ~
+    unit: tiles
+    pose:
+      x: 2.5
+      y: 1.46
+      z: 0.0
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0
+  map_0/sign_stop_41:
+    relative_to: ~
+    unit: tiles
+    pose:
+      x: 2.5
+      y: -0.56
+      z: 0.0
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0
