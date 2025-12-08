@@ -1,18 +1,20 @@
 import numpy as np
 
+# TODO : review apriltag_map_slam_node.py
+# TODO : add covariance calculations
+
 class MapSlam2D(object):
     def __init__(self):
-        # x: [x, y, theta]
-        self.x = np.zeros((3, 1))
-        self.poses = []
+        self.x = np.zeros((3, 1)) # x: [x, y, theta] current pose
+        self.poses = [] # list of dictionaries containing pose and detection information
+        self.landmark_ids = [] # list of tag_ids
 
-    def get_poses(self, v, w, dt, tag_id, z):
-                """
+    def add_pose(self, v, w, dt, detections):
+        """
         v: linear velocity (m/s)
         w: angular velocity (rad/s)
         dt: time step (s)
-        tag_id: id of landmark
-        z: [range, bearing] of landmark
+        detections: list of apriltag detections
         """
         if dt <= 0.0:
             return
@@ -36,24 +38,48 @@ class MapSlam2D(object):
         x[1, 0] += dy
         x[2, 0] = self._wrap_angle(theta + dtheta)
 
-        # pose and landmark information
+        # pose information
         pose = {
             'x': x[0, 0],
             'y': x[1, 0],
             'theta': x[2, 0],
-            'observations': {
-                'landmark_id': tag_id,
-                'range': float(z[0]),
-                'bearing': float(z[1])
-            }
+            'odometry': {
+                'dx': dx,
+                'dy': dy,
+                'dtheta': dtheta
+            },
+            'observations': []
         }
+
+        # landmark information
+        for detection in detections:
+            t = detection.pose_t
+            cam_x = float(t[0, 0])  # right
+            cam_y = float(t[1, 0])  # down
+            cam_z = float(t[2, 0])  # forward
+
+            # Convert to 2D robot frame: x forward, y left
+            dx = cam_z
+            dy = -cam_x
+
+            r = np.sqrt(dx**2 + dy**2)
+            bearing = np.arctan2(dy, dx)
+
+            pose['observations'].append({
+                'landmark_id': detection.tag_id,
+                'range': r,
+                'bearing': bearing
+            })
 
         self.poses.append(pose)
 
-    def get_state(self, num_landmarks):
+    def get_state(self):
         """Get state vector: [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T"""
+        num_poses = len(self.poses)
+        num_landmarks = len(self.landmark_ids)
+
         # Initialize state
-        state = np.zeros(len(self.poses) * 3 + num_landmarks * 2)
+        state = np.zeros(3 * num_poses + 2 * num_landmarks)
 
         # Initial state
         state[0] = self.poses[0]['x']
@@ -61,8 +87,8 @@ class MapSlam2D(object):
         state[2] = self.poses[0]['theta']
 
         # Next states
-        for i in range(1, len(self.poses)):
-            odometry = self.poses[i - 1]['odometry']
+        for i in range(1, num_poses):
+            odometry = self.poses[i]['odometry']
             if odometry:
                 state[i * 3] = state[(i - 1) * 3] + odometry['dx']
                 state[i * 3 + 1] = state[(i - 1) * 3 + 1] + odometry['dy']
@@ -71,25 +97,45 @@ class MapSlam2D(object):
         # Landmark states
         for i, pose in enumerate(self.poses):
             for observation in pose['observations']:
-                l_i = observation['landmark_id']
-                l_x = state[i * 3] * np.cos(observation['bearing'] + state[i * 3 + 2])
-                l_y = state[i * 3 + 1] * np.sin(observation['bearing'] + state[i * 3 + 2])
-        # TODO : state vector landmarks
+                tag_id = observation['landmark_id']
+                lm_index = self._get_landmark_index(tag_id)
 
-    def update(self, poses, num_landmarks, max_iter=50):
+                # Initialize new landmark
+                if lm_index == -1:
+                    self.landmark_ids.append(tag_id)
+                    lm_index = num_landmarks - 1
+                
+                # pose
+                x = state[i * 3]
+                y = state[i * 3 + 1]
+                theta = state[i * 3 + 2]
+
+                # Update state with latest value (might not be the best idea because it replaces older values) TODO
+                state[num_poses * 3 + lm_index * 2] = x * np.cos(observation['bearing'] + theta)
+                state[num_poses * 3 + lm_index * 2 + 1] = y * np.sin(observation['bearing'] + theta)
+
+    def update(self, poses, max_iter=50):
         """Maximum a posteriori optimization using Gauss-Newton update"""
-        state = self.get_state(num_landmarks)
+        num_poses = len(self.poses)
+        num_landmarks = len(self.landmark_ids)
+        
+        # get state vector
+        state = self.get_state()
 
         for iteration in range(max_iter):
+            # number of residuals to calculate
+            n_residuals = (num_poses - 1) * 3
+            for pose in self.poses:
+                n_residuals += len(pose['observations']) * 2
 
             residual_i = 0
-            residuals = np.array([])
-            jacobian = np.array((qqc, len(self.poses) * 3 + num_landmarks * 2))
+            residuals = np.array((n_residuals))
+            jacobian = np.array((n_residuals, num_poses * 3 + num_landmarks * 2))
 
             # Odometry
-            for k in range(len(self.poses) - 1):
-                i = k * 3        # pose i
-                j = (k + 1) * 3  # pose i + 1
+            for k in range(1, num_poses):
+                i = (k - 1) * 3  # pose t - 1
+                j = k * 3        # pose t
 
                 # x prediction
                 x_i = state[i]
@@ -109,9 +155,9 @@ class MapSlam2D(object):
                 # residuals
                 odometry = self.poses[i]['odometry']
                 if odometry:
-                    np.hstack((residuals, np.array([x_pred - odometry['dx']])))
-                    np.hstack((residuals, np.array([y_pred - odometry['dy']])))
-                    np.hstack((residuals, np.array([theta_pred - odometry['theta']])))
+                    residuals[residual_i] = x_pred - odometry['dx']
+                    residuals[residual_i + 1] = y_pred - odometry['dy']
+                    residuals[residual_i + 2] = theta_pred - odometry['theta']
 
                 # jacobian
                 jacobian[residual_i, i] = -1
@@ -133,8 +179,10 @@ class MapSlam2D(object):
 
                 for observation in pose['observations']:
                     # landmark
-                    l_i = observation['landmark_id']
-                    j = len(self.poses) * 3 + l_i * 2
+                    tag_id = observation['landmark_id']
+                    l_i = self._get_landmark_index(tag_id)
+                    j = num_poses * 3 + l_i * 2
+
                     l_x = state[j]
                     l_y = state[j + 1]
 
@@ -150,8 +198,8 @@ class MapSlam2D(object):
                         b_pred = self._wrap_angle(np.arctan2(dy, dx) - p_theta)
 
                         # residuals
-                        np.hstack((residuals, np.array([observation['range'] - r_pred])))
-                        np.hstack((residuals, np.array([observation['bearing'] - b_pred])))
+                        residuals[residual_i] = observation['range'] - r_pred
+                        residuals[residual_i + 1] = observation['bearing'] - b_pred
 
                         # jacobian (range)
                         jacobian[residual_i, p_i] = dx / sqrt_q
@@ -190,6 +238,13 @@ class MapSlam2D(object):
                 break
 
         return state
+
+    def _get_landmark_index(self, tag_id):
+        try:
+            idx = self.landmark_ids.index(tag_id)
+        except ValueError:
+            idx = -1
+        return idx
 
     @staticmethod
     def _wrap_angle(a):

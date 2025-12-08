@@ -193,7 +193,7 @@ class AprilTagMapSlamNode(object):
         self.gt_path_pub.publish(self.gt_path)
 
     # ---------- ODOMETRY -> PREDICT ----------
-    def odom_cb(self, msg: Odometry):
+    def odom_cb(self, msg: Odometry): # TODO
         v = msg.twist.twist.linear.x
         w = msg.twist.twist.angular.z
         
@@ -222,7 +222,7 @@ class AprilTagMapSlamNode(object):
         self.publish_all()
 
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
-    def image_cb(self, msg: CompressedImage):
+    def image_cb(self, msg: CompressedImage): # TODO
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
             return
@@ -358,7 +358,7 @@ class AprilTagMapSlamNode(object):
         self.publish_path()
         self.publish_tf()
 
-    def publish_pose(self):
+    def publish_pose(self): # TODO
         ps = PoseStamped()
         ps.header.stamp = rospy.Time.now()
         ps.header.frame_id = "map"
@@ -376,7 +376,7 @@ class AprilTagMapSlamNode(object):
 
         self.pose_pub.publish(ps)
 
-    def publish_slam_odometry(self):
+    def publish_slam_odometry(self): # TODO
         """
         Publish SLAM estimated pose as Odometry message for RVIZ visualization.
         This allows using the rviz/Odometry display with Axes shape.
@@ -422,7 +422,7 @@ class AprilTagMapSlamNode(object):
 
         self.slam_odom_pub.publish(odom)
 
-    def publish_pose_with_covariance(self):
+    def publish_pose_with_covariance(self): # TODO
         """Publish pose with covariance for visualization in RViz."""
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = rospy.Time.now()
@@ -450,7 +450,7 @@ class AprilTagMapSlamNode(object):
 
         self.pose_cov_pub.publish(msg)
 
-    def publish_landmarks(self):
+    def publish_landmarks(self): # TODO
         """Publish landmark markers for RViz visualization."""
         ma = MarkerArray()
         
@@ -516,7 +516,7 @@ class AprilTagMapSlamNode(object):
 
         self.lm_pub.publish(ma)
 
-    def create_covariance_ellipse(self, idx, lx, ly):
+    def create_covariance_ellipse(self, idx, lx, ly): # TODO
         """Create a marker showing the covariance ellipse for a landmark."""
         lm_start = 3 + 2 * idx
         if lm_start + 1 >= self.slam.P.shape[0]:
@@ -562,7 +562,7 @@ class AprilTagMapSlamNode(object):
         except Exception:
             return None
 
-    def create_robot_marker(self):
+    def create_robot_marker(self): # TODO
         """Create an arrow marker showing the robot pose."""
         marker = Marker()
         marker.header.stamp = rospy.Time.now()
@@ -593,7 +593,7 @@ class AprilTagMapSlamNode(object):
         
         return marker
 
-    def publish_path(self):
+    def publish_path(self): # TODO
         """Publish the robot's path history."""
         x = self.slam.x
         
@@ -616,7 +616,7 @@ class AprilTagMapSlamNode(object):
         self.path.header.stamp = rospy.Time.now()
         self.path_pub.publish(self.path)
 
-    def publish_tf(self):
+    def publish_tf(self): # TODO
         """Publish TF transform from map to base_link for RViz visualization."""
         x = self.slam.x
 
