@@ -5,8 +5,18 @@ import numpy as np
 
 class MapSlam2D(object):
     def __init__(self):
-        self.x = np.zeros((3, 1)) # x: [x, y, theta] current pose
-        self.poses = [] # list of dictionaries containing pose and detection information
+        self.x = np.zeros(3) # x: [x, y, theta] current pose
+        self.poses = [{
+            'x': self.x[0],
+            'y': self.x[1],
+            'theta': self.x[2],
+            'odometry': {
+                'dx': 0.0,
+                'dy': 0.0,
+                'dtheta': 0.0
+            },
+            'observations': []
+        }] # list of dictionaries containing pose and detection information
         self.landmark_ids = [] # list of tag_ids
 
     def add_pose(self, v, w, dt, detections):
@@ -20,7 +30,7 @@ class MapSlam2D(object):
             return
 
         x = self.x
-        theta = x[2, 0]
+        theta = x[2]
 
         # Unicycle motion model
         if abs(w) < 1e-6:
@@ -34,15 +44,15 @@ class MapSlam2D(object):
             dtheta = w * dt
 
         # Update robot pose
-        x[0, 0] += dx
-        x[1, 0] += dy
-        x[2, 0] = self._wrap_angle(theta + dtheta)
+        x[0] += dx
+        x[1] += dy
+        x[2] = self._wrap_angle(theta + dtheta)
 
         # pose information
         pose = {
-            'x': x[0, 0],
-            'y': x[1, 0],
-            'theta': x[2, 0],
+            'x': x[0],
+            'y': x[1],
+            'theta': x[2],
             'odometry': {
                 'dx': dx,
                 'dy': dy,
@@ -74,7 +84,7 @@ class MapSlam2D(object):
         self.poses.append(pose)
 
     def get_state(self):
-        """Get state vector: [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T"""
+        """Get state vector: [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T as a first heuristic"""
         num_poses = len(self.poses)
         num_landmarks = len(self.landmark_ids)
 
@@ -89,10 +99,11 @@ class MapSlam2D(object):
         # Next states
         for i in range(1, num_poses):
             odometry = self.poses[i]['odometry']
-            if odometry:
-                state[i * 3] = state[(i - 1) * 3] + odometry['dx']
-                state[i * 3 + 1] = state[(i - 1) * 3 + 1] + odometry['dy']
-                state[i * 3 + 2] = state[(i - 1) * 3 + 2] + odometry['dtheta']
+            
+            # Update pose in state
+            state[i * 3] = state[(i - 1) * 3] + odometry['dx']
+            state[i * 3 + 1] = state[(i - 1) * 3 + 1] + odometry['dy']
+            state[i * 3 + 2] = state[(i - 1) * 3 + 2] + odometry['dtheta']
 
         # Landmark states
         for i, pose in enumerate(self.poses):
@@ -110,11 +121,11 @@ class MapSlam2D(object):
                 y = state[i * 3 + 1]
                 theta = state[i * 3 + 2]
 
-                # Update state with latest value
+                # Update state with latest landmark value
                 state[num_poses * 3 + lm_index * 2] = x + observation['range'] * np.cos(observation['bearing'] + theta)
                 state[num_poses * 3 + lm_index * 2 + 1] = y + observation['range'] * np.sin(observation['bearing'] + theta)
 
-    def update(self, poses, max_iter=50):
+    def update(self, max_iter=50):
         """Maximum a posteriori optimization using Gauss-Newton update"""
         num_poses = len(self.poses)
         num_landmarks = len(self.landmark_ids)
