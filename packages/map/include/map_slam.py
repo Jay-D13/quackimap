@@ -140,8 +140,8 @@ class MapSlam2D(object):
                 n_residuals += len(pose['observations']) * 2
 
             residual_i = 0
-            residuals = np.array((n_residuals))
-            jacobian = np.array((n_residuals, num_poses * 3 + num_landmarks * 2))
+            residuals = np.zeros((n_residuals))
+            jacobian = np.zeros((n_residuals, num_poses * 3 + num_landmarks * 2))
 
             # Odometry
             for k in range(1, num_poses):

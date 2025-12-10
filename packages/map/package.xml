@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>slam</name>
+  <name>map</name>
   <version>0.0.1</version>
   <description>AprilTag MAP SLAM for Duckiebot</description>
 
