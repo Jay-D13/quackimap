@@ -21,8 +21,8 @@ class AprilTagEkfSlamNode(object):
         self.veh = rospy.get_param("~veh", "")
         self.image_topic = rospy.get_param("~image_topic", "/camera/compressed")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
-        self.gt_topic = rospy.get_param("~gt_topic", "/ground_truth/odom")  # Ground truth topic (Pose type)
-        self.use_gt = rospy.get_param("~use_ground_truth", True)
+        # self.gt_topic = rospy.get_param("~gt_topic", "/ground_truth/odom")  # Ground truth topic (Pose type)
+        # self.use_gt = rospy.get_param("~use_ground_truth", True)
         self.camera_params = None
         self.camera_info_topic = rospy.get_param(
             "~camera_info_topic", "/camera_node/camera_info"
@@ -65,6 +65,11 @@ class AprilTagEkfSlamNode(object):
             decode_sharpening=0.25,
             debug=0,
         )
+        
+        # Stats for logging
+        self.detection_count = 0
+        self.last_detection_time = None
+        self.odom_count = 0
 
         # ROS I/O
         self.bridge = CvBridge()
@@ -77,10 +82,10 @@ class AprilTagEkfSlamNode(object):
         )
         
         # Ground truth subscriber - accepts Pose messages (from gt_pose_visualizer_node)
-        if self.use_gt:
-            self.gt_sub = rospy.Subscriber(
-                self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
-            )
+        # if self.use_gt:
+        #     self.gt_sub = rospy.Subscriber(
+        #         self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
+        #     )
 
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
@@ -106,15 +111,11 @@ class AprilTagEkfSlamNode(object):
         # TF broadcaster for RViz visualization
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
-        # Stats for logging
-        self.detection_count = 0
-        self.last_detection_time = None
-        self.odom_count = 0
 
         rospy.loginfo("AprilTag EKF-SLAM node initialized")
         rospy.loginfo(f"  Image topic: {self.image_topic}")
         rospy.loginfo(f"  Odom topic: {self.odom_topic}")
-        rospy.loginfo(f"  GT topic: {self.gt_topic}")
+        # rospy.loginfo(f"  GT topic: {self.gt_topic}")
         rospy.loginfo(f"  Tag size: {self.tag_size}m")
 
     def camera_info_cb(self, msg: CameraInfo):
