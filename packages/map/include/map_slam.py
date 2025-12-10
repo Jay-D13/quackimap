@@ -110,9 +110,9 @@ class MapSlam2D(object):
                 y = state[i * 3 + 1]
                 theta = state[i * 3 + 2]
 
-                # Update state with latest value (might not be the best idea because it replaces older values) TODO
-                state[num_poses * 3 + lm_index * 2] = x * np.cos(observation['bearing'] + theta)
-                state[num_poses * 3 + lm_index * 2 + 1] = y * np.sin(observation['bearing'] + theta)
+                # Update state with latest value
+                state[num_poses * 3 + lm_index * 2] = x + observation['range'] * np.cos(observation['bearing'] + theta)
+                state[num_poses * 3 + lm_index * 2 + 1] = y + observation['range'] * np.sin(observation['bearing'] + theta)
 
     def update(self, poses, max_iter=50):
         """Maximum a posteriori optimization using Gauss-Newton update"""
@@ -137,35 +137,35 @@ class MapSlam2D(object):
                 i = (k - 1) * 3  # pose t - 1
                 j = k * 3        # pose t
 
+                odometry = self.poses[i]['odometry']
+
                 # x prediction
                 x_i = state[i]
                 x_j = state[j]
-                x_pred = x_j - x_i
+                x_pred = x_i + odometry['dx']
 
                 # y prediction
                 y_i = state[i + 1]
                 y_j = state[j + 1]
-                y_pred = y_j - y_i
+                y_pred = y_i + odometry['dy']
 
                 # theta prediction
                 theta_i = state[i + 2]
                 theta_j = state[j + 2]
-                theta_pred = theta_j - theta_i
+                theta_pred = theta_i + odometry['dtheta']
 
                 # residuals
-                odometry = self.poses[i]['odometry']
-                if odometry:
-                    residuals[residual_i] = x_pred - odometry['dx']
-                    residuals[residual_i + 1] = y_pred - odometry['dy']
-                    residuals[residual_i + 2] = theta_pred - odometry['theta']
+                residuals[residual_i] = x_pred - x_j
+                residuals[residual_i + 1] = y_pred - y_j
+                residuals[residual_i + 2] = theta_pred - theta_j
 
                 # jacobian
-                jacobian[residual_i, i] = -1
-                jacobian[residual_i, j] = 1
-                jacobian[residual_i + 1, i + 1] = -1
-                jacobian[residual_i + 1, j + 1] = 1
-                jacobian[residual_i + 2, i + 2] = -1
-                jacobian[residual_i + 2, j + 2] = 1
+                jacobian[residual_i, i] = 1 # d(residual_x)/dx_i
+                jacobian[residual_i, j] = -1 # d(residual_x)/dx_j
+                jacobian[residual_i + 1, i + 1] = 1 # d(residual_y)/dy_i
+                jacobian[residual_i + 1, j + 1] = -1 # d(residual_y)/dy_j
+                jacobian[residual_i + 2, i + 2] = 1 # d(residual_theta)/dtheta_i
+                jacobian[residual_i + 2, j + 2] = -1 # d(residual_theta)/dtheta_j
 
                 residual_i += 3
 
@@ -198,37 +198,35 @@ class MapSlam2D(object):
                         b_pred = self._wrap_angle(np.arctan2(dy, dx) - p_theta)
 
                         # residuals
-                        residuals[residual_i] = observation['range'] - r_pred
-                        residuals[residual_i + 1] = observation['bearing'] - b_pred
+                        residuals[residual_i] = r_pred - observation['range']
+                        residuals[residual_i + 1] = b_pred - observation['bearing']
 
                         # jacobian (range)
-                        jacobian[residual_i, p_i] = dx / sqrt_q
-                        jacobian[residual_i, p_i + 1] = dy / sqrt_q
-                        jacobian[residual_i, l_i] = -dx / sqrt_q
-                        jacobian[residual_i, l_i + 1] = -dy / sqrt_q
+                        jacobian[residual_i, p_i] = dx / sqrt_q # d(residual_range)/d(p_x)
+                        jacobian[residual_i, p_i + 1] = dy / sqrt_q # d(residual_range)/d(p_y)
+                        jacobian[residual_i, l_i] = -dx / sqrt_q # d(residual_range)/d(l_x)
+                        jacobian[residual_i, l_i + 1] = -dy / sqrt_q # d(residual_range)/d(l_y)
 
                         # jacobian (bearing)
-                        jacobian[residual_i + 1, p_i] = -dy / q
-                        jacobian[residual_i + 1, p_i + 1] = dx / q
-                        jacobian[residual_i + 1, p_i + 2] = 1
-                        jacobian[residual_i + 1, l_i] = dy / q
-                        jacobian[residual_i + 1, l_i + 1] = -dx / q
+                        jacobian[residual_i + 1, p_i] = dy / q # d(residual_bearing)/d(p_x)
+                        jacobian[residual_i + 1, p_i + 1] = -dx / q # d(residual_bearing)/d(p_y)
+                        jacobian[residual_i + 1, p_i + 2] = -1 # d(residual_bearing)/d(p_theta)
+                        jacobian[residual_i + 1, l_i] = -dy / q # d(residual_bearing)/d(l_x)
+                        jacobian[residual_i + 1, l_i + 1] = dx / q # d(residual_bearing)/d(l_y)
 
                         residual_i += 2
             
             JTJ = jacobian.T @ jacobian
             JTR = jacobian.T @ residuals
 
-            H = JTJ
-
-            # first pose
-            H[0, 0] += 1000
-            H[1, 1] += 1000
-            H[2, 2] += 1000
+            # fix first pose
+            JTJ[0, 0] += 10000
+            JTJ[1, 1] += 10000
+            JTJ[2, 2] += 10000
             JTR[0:3] = 0
 
-            # solver
-            delta = np.linalg.solve(H, JTR)
+            # solver : JTJ * delta = JTR
+            delta = np.linalg.solve(JTJ, JTR)
 
             # update
             state += delta
