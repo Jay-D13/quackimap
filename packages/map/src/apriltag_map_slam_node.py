@@ -12,7 +12,7 @@ from geometry_msgs.msg import PoseStamped, Point, PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker, MarkerArray
 
 from dt_apriltags import Detector
-from slam.include.slam.map_slam import MapSlam2D
+from map.include.map_slam import MapSlam2D
 
 
 class AprilTagMapSlamNode(object):
@@ -38,6 +38,12 @@ class AprilTagMapSlamNode(object):
         # Backend SLAM filter
         self.slam = MapSlam2D()
         self.last_odom_time = None
+        self.last_pose_time = None  # time stamp of last pose added to MapSlam2D
+
+        # Accumulated odometry between keyframes (for better integration)
+        self.acc_vdt = 0.0
+        self.acc_wdt = 0.0
+        self.acc_dt = 0.0
 
         # Path history for visualization
         self.path = Path()
@@ -90,6 +96,8 @@ class AprilTagMapSlamNode(object):
         
         # Odometry publisher for SLAM estimate (for RVIZ Axes visualization)
         self.slam_odom_pub = rospy.Publisher("slam_odom", Odometry, queue_size=10)
+
+        rospy.Timer(rospy.Duration(5.0), self.run_optimization)
 
         """         
         # Odometry publisher for ground truth (for RVIZ Axes visualization)
@@ -194,10 +202,14 @@ class AprilTagMapSlamNode(object):
 
     # ---------- ODOMETRY -> PREDICT ----------
     def odom_cb(self, msg: Odometry): # TODO
+        # We only use the twist (v, w) and timestamps here.
+        # The pose in msg.pose.pose is not fed into MapSlam2D; instead,
+        # we accumulate relative motion between keyframe poses and use it
+        # when a new AprilTag detection arrives.
         v = msg.twist.twist.linear.x
         w = msg.twist.twist.angular.z
         
-        # Store for odometry message
+        # Store for odometry message and later SLAM pose creation
         self.last_v = v
         self.last_w = w
 
@@ -212,14 +224,24 @@ class AprilTagMapSlamNode(object):
         if dt <= 0.0:
             return
 
+        # Accumulate odometry over time between keyframes
+        self.acc_vdt += v * dt
+        self.acc_wdt += w * dt
+        self.acc_dt += dt
+
         # Debug: log velocities periodically
         self.odom_count += 1
         if self.odom_count % 50 == 0:
-            rospy.loginfo(f"SLAM Predict: v={v:.4f} m/s, w={np.rad2deg(w):.2f} deg/s, dt={dt:.3f}s")
-            rospy.loginfo(f"SLAM State: x={self.slam.x[0,0]:.3f}, y={self.slam.x[1,0]:.3f}, theta={np.rad2deg(self.slam.x[2,0]):.1f}deg")
+            rospy.loginfo(
+                f"SLAM Odometry: v={v:.4f} m/s, w={np.rad2deg(w):.2f} deg/s, dt={dt:.3f}s"
+            )
+            rospy.loginfo(
+                f"SLAM State (incremental): x={self.slam.x[0,0]:.3f}, "
+                f"y={self.slam.x[1,0]:.3f}, "
+                f"theta={np.rad2deg(self.slam.x[2,0]):.1f}deg"
+            )
 
-        self.slam.predict(v, w, dt)
-        self.publish_all()
+        # No graph update here; MapSlam2D is only updated in image_cb when tags are seen.
 
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
     def image_cb(self, msg: CompressedImage): # TODO
@@ -228,8 +250,8 @@ class AprilTagMapSlamNode(object):
             return
 
         try:
-            np_arr = np.frombuffer(msg.data, np.uint8)
-            cv_img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            # Use CvBridge to go directly from CompressedImage -> cv2 BGR image
+            cv_img = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
             rospy.logwarn("cv_bridge error: %s", e)
             return
@@ -242,21 +264,38 @@ class AprilTagMapSlamNode(object):
             camera_params=self.camera_params,
             tag_size=self.tag_size,
         )
-
-        # Draw detections on image for visualization
-        debug_img = cv_img.copy()
-        self.draw_detections(debug_img, detections)
         
-        # Publish debug image
-        self.publish_debug_image(debug_img, msg.header.stamp)
-
         if len(detections) == 0:
             return
 
-        for det in detections:
-            tag_id = det.tag_id
 
-            # det.pose_t: 3x1 translation of tag in camera frame
+        # We need accumulated odometry to integrate between keyframe poses
+        if self.last_odom_time is None or self.acc_dt <= 0.0:
+            rospy.logwarn_throttle(
+                5.0,
+                "Got AprilTag detections but no valid accumulated odometry; "
+                "skipping pose node add in MapSlam2D.",
+            )
+        else:
+            # Average velocities over the accumulated interval
+            v_avg = self.acc_vdt / self.acc_dt
+            w_avg = self.acc_wdt / self.acc_dt
+            dt = self.acc_dt
+
+            # Add a new pose node to the pose graph using accumulated odometry and all detections
+            self.slam.add_pose(v_avg, w_avg, dt, detections)
+
+            # Reset accumulators for the next keyframe interval
+            self.acc_vdt = 0.0
+            self.acc_wdt = 0.0
+            self.acc_dt = 0.0
+
+            self.last_pose_time = self.last_odom_time
+            self.last_detection_time = rospy.Time.now()
+
+        # Logging for each detection (range/bearing in robot frame)
+        for det in detections:
+                         
             t = det.pose_t
             cam_x = float(t[0, 0])  # right
             cam_y = float(t[1, 0])  # down
@@ -267,18 +306,92 @@ class AprilTagMapSlamNode(object):
             dy = -cam_x
 
             r = np.sqrt(dx**2 + dy**2)
-            bearing = np.arctan2(dy, dx)
-
-            z = np.array([r, bearing])
-            self.slam.update(tag_id, z)
+            bearing = np.arctan2(dy, dx) 
+            
 
             self.detection_count += 1
-            self.last_detection_time = rospy.Time.now()
+            
 
-            rospy.loginfo_throttle(1.0, 
-                f"Tag {tag_id} detected: range={r:.2f}m, bearing={np.rad2deg(bearing):.1f}deg")
+            rospy.loginfo_throttle(
+                1.0,
+                f"Tag {det.tag_id} detected: range={r:.2f}m, bearing={np.rad2deg(bearing):.1f}deg",
+            )
 
+        # Draw detections on image for visualization
+        debug_img = cv_img.copy()
+        self.draw_detections(debug_img, detections)
+        
+        # Publish debug image
+        self.publish_debug_image(debug_img, msg.header.stamp)
+
+        # Update all visualization using the incremental pose estimate in self.slam.x
         self.publish_all()
+
+    def run_optimization(self, event=None):
+        """
+        Periodically run batch optimization in MapSlam2D and publish the
+        optimized trajectory as a Path message.
+        all_states layout:
+          [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T
+        """
+        # Need at least one pose to optimize
+        if not self.slam.poses:
+            return
+
+        all_states = self.slam.update()  # 1D state vector as described above
+
+
+        if all_states is None:
+            return
+
+        all_states = np.asarray(all_states).ravel()
+        N = all_states.size
+        num_poses = len(self.slam.poses)
+        num_landmarks = len(self.slam.landmark_ids)
+
+        # infer number of landmarks from the tail of the vector
+        lm_dim = N - 3 * num_poses
+        if lm_dim % 2 != 0:
+            rospy.logwarn_throttle(
+                5.0,
+                f"Landmark segment length {lm_dim} is not divisible by 2; landmarks ignored in this step.",
+            )
+        num_landmarks = lm_dim // 2  # currently unused, but derived from all_states shape
+
+        if num_landmarks != len(self.slam.landmark_ids):
+            rospy.logwarn_throttle(
+                5.0,
+                f"Number of landmarks in state vector ({num_landmarks}) does not match SLAM landmark IDs ({len(self.slam.landmark_ids)}).",
+            )
+
+        # Build optimized path from pose segment of all_states
+        opt_path = Path()
+        opt_path.header.stamp = rospy.Time.now()
+        opt_path.header.frame_id = "map"
+
+        for k in range(num_poses):
+            idx = 3 * k
+            x = float(all_states[idx])
+            y = float(all_states[idx + 1])
+            theta = float(all_states[idx + 2])
+
+            ps = PoseStamped()
+            ps.header.stamp = opt_path.header.stamp
+            ps.header.frame_id = "map"
+            ps.pose.position.x = x
+            ps.pose.position.y = y
+            ps.pose.position.z = 0.0
+
+            qz = np.sin(theta / 2.0)
+            qw = np.cos(theta / 2.0)
+            ps.pose.orientation.z = qz
+            ps.pose.orientation.w = qw
+
+            opt_path.poses.append(ps)
+
+        # Replace current path with optimized one and publish
+        self.path = opt_path
+        self.path_pub.publish(opt_path)
 
     def draw_detections(self, img, detections):
         """Draw AprilTag detections on image for debugging."""
@@ -352,7 +465,7 @@ class AprilTagMapSlamNode(object):
     def publish_all(self):
         """Publish all visualization data."""
         self.publish_pose()
-        self.publish_pose_with_covariance()
+        #self.publish_pose_with_covariance()
         self.publish_slam_odometry()
         self.publish_landmarks()
         self.publish_path()
@@ -397,6 +510,7 @@ class AprilTagMapSlamNode(object):
         odom.pose.pose.orientation.z = np.sin(yaw / 2.0)
         odom.pose.pose.orientation.w = np.cos(yaw / 2.0)
 
+        """ 
         # Add covariance from Map (6x6 row-major)
         # ROS covariance order: x, y, z, roll, pitch, yaw
         cov = np.zeros(36)
@@ -410,7 +524,8 @@ class AprilTagMapSlamNode(object):
         cov[30] = P[2, 0]  # yaw-x
         cov[31] = P[2, 1]  # yaw-y
         cov[35] = P[2, 2]  # yaw-yaw
-        odom.pose.covariance = cov.tolist()
+        odom.pose.covariance = cov.tolist() 
+        """
 
         # Add velocity information
         odom.twist.twist.linear.x = self.last_v
@@ -423,7 +538,7 @@ class AprilTagMapSlamNode(object):
         self.slam_odom_pub.publish(odom)
 
     def publish_pose_with_covariance(self): # TODO
-        """Publish pose with covariance for visualization in RViz."""
+        """Publish current pose with covariance for visualization in RViz."""
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = "map"
@@ -436,7 +551,7 @@ class AprilTagMapSlamNode(object):
         yaw = float(x[2, 0])
         msg.pose.pose.orientation.z = np.sin(yaw / 2.0)
         msg.pose.pose.orientation.w = np.cos(yaw / 2.0)
-
+        """         
         # Fill covariance (6x6 row-major, we only have x, y, theta)
         # ROS covariance order: x, y, z, roll, pitch, yaw
         cov = np.zeros(36)
@@ -445,9 +560,10 @@ class AprilTagMapSlamNode(object):
         cov[1] = P[0, 1]   # xy
         cov[6] = P[1, 0]   # yx
         cov[7] = P[1, 1]   # yy
-        cov[35] = P[2, 2]  # yaw-yaw
+        cov[35] = P[2, 2]  # yaw-yaw 
+        
         msg.pose.covariance = cov.tolist()
-
+        """
         self.pose_cov_pub.publish(msg)
 
     def publish_landmarks(self): # TODO
