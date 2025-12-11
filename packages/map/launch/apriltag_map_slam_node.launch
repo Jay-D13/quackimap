@@ -1,5 +1,5 @@
 <launch>
-  <arg name="pkg_name"  default="slam" doc="name of the package"/>
+  <arg name="pkg_name"  default="map" doc="name of the package"/>
   <arg name="node_name" default="apriltag_map_slam_node" doc="name of the node"/>
   <arg name="veh" doc="Name of vehicle. ex: megaman"/>
 
