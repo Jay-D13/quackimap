@@ -87,6 +87,8 @@ class AprilTagMapSlamNode(object):
             self.gt_sub = rospy.Subscriber(
                 self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
             )
+            # Ground truth path publisher
+            self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
 
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
@@ -104,12 +106,9 @@ class AprilTagMapSlamNode(object):
         self.gt_odom_pub = rospy.Publisher("gt_odom", Odometry, queue_size=10)
         """ 
 
-        # Ground truth path publisher
-        self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
-        
         # Debug image publisher - shows detected AprilTags
         self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
-        self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
+        #self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
 
         # TF broadcaster for RViz visualization
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
@@ -236,15 +235,17 @@ class AprilTagMapSlamNode(object):
                 f"SLAM Odometry: v={v:.4f} m/s, w={np.rad2deg(w):.2f} deg/s, dt={dt:.3f}s"
             )
             rospy.loginfo(
-                f"SLAM State (incremental): x={self.slam.x[0,0]:.3f}, "
-                f"y={self.slam.x[1,0]:.3f}, "
-                f"theta={np.rad2deg(self.slam.x[2,0]):.1f}deg"
+                f"SLAM State (incremental): x={self.slam.x[0]:.3f}, "
+                f"y={self.slam.x[1]:.3f}, "
+                f"theta={np.rad2deg(self.slam.x[2]):.1f}deg"
             )
 
         # No graph update here; MapSlam2D is only updated in image_cb when tags are seen.
 
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
-    def image_cb(self, msg: CompressedImage): # TODO
+    def image_cb(self, msg: CompressedImage):
+
+        #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY KEYFRAMES OTHERWISE 
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
             return
@@ -364,6 +365,64 @@ class AprilTagMapSlamNode(object):
                 f"Number of landmarks in state vector ({num_landmarks}) does not match SLAM landmark IDs ({len(self.slam.landmark_ids)}).",
             )
 
+        # --- Publish optimized landmarks as MarkerArray ---
+        if num_landmarks > 0 and lm_dim >= 2:
+            lm_markers = MarkerArray()
+
+            # Points marker for all optimized landmarks
+            points_marker = Marker()
+            points_marker.header.stamp = rospy.Time.now()
+            points_marker.header.frame_id = "map"
+            points_marker.ns = "opt_landmark_points"
+            points_marker.id = 0
+            points_marker.type = Marker.POINTS
+            points_marker.action = Marker.ADD
+            points_marker.scale.x = 0.08
+            points_marker.scale.y = 0.08
+            points_marker.color.r = 0.0
+            points_marker.color.g = 0.0
+            points_marker.color.b = 1.0
+            points_marker.color.a = 1.0
+            points_marker.lifetime = rospy.Duration(0)
+
+            for i, tag_id in enumerate(self.slam.landmark_ids):
+                base = 3 * num_poses + 2 * i
+                if base + 1 >= N:
+                    break
+
+                lx = float(all_states[base])
+                ly = float(all_states[base + 1])
+
+                # Add point
+                p = Point()
+                p.x = lx
+                p.y = ly
+                p.z = 0.0
+                points_marker.points.append(p)
+
+                # Add text label
+                text_marker = Marker()
+                text_marker.header.stamp = rospy.Time.now()
+                text_marker.header.frame_id = "map"
+                text_marker.ns = "opt_landmark_labels"
+                text_marker.id = i + 100
+                text_marker.type = Marker.TEXT_VIEW_FACING
+                text_marker.action = Marker.ADD
+                text_marker.pose.position.x = lx
+                text_marker.pose.position.y = ly
+                text_marker.pose.position.z = 0.15
+                text_marker.scale.z = 0.1
+                text_marker.color.r = 1.0
+                text_marker.color.g = 1.0
+                text_marker.color.b = 0.0
+                text_marker.color.a = 1.0
+                text_marker.text = f"Tag {tag_id}"
+                text_marker.lifetime = rospy.Duration(0)
+                lm_markers.markers.append(text_marker)
+
+            lm_markers.markers.append(points_marker)
+            self.lm_pub.publish(lm_markers)
+
         # Build optimized path from pose segment of all_states
         opt_path = Path()
         opt_path.header.stamp = rospy.Time.now()
@@ -436,7 +495,7 @@ class AprilTagMapSlamNode(object):
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         # Draw robot pose estimate
-        x, y, theta = self.slam.x[0, 0], self.slam.x[1, 0], self.slam.x[2, 0]
+        x, y, theta = self.slam.x[0], self.slam.x[1], self.slam.x[2]
         pose_text = f"Pose: x={x:.2f}, y={y:.2f}, th={np.rad2deg(theta):.1f}deg"
         cv2.putText(img, pose_text, (10, 90),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
@@ -453,6 +512,7 @@ class AprilTagMapSlamNode(object):
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing compressed debug image: {e}")
 
+        """ 
         # Also publish raw for rqt_image_view
         try:
             raw_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
@@ -460,15 +520,15 @@ class AprilTagMapSlamNode(object):
             self.debug_img_raw_pub.publish(raw_msg)
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing raw debug image: {e}")
-
+        """
     # ---------- PUBLISH ----------
     def publish_all(self):
         """Publish all visualization data."""
         self.publish_pose()
         #self.publish_pose_with_covariance()
         self.publish_slam_odometry()
-        self.publish_landmarks()
-        self.publish_path()
+        #self.publish_landmarks()
+        #self.publish_path()
         self.publish_tf()
 
     def publish_pose(self): # TODO
@@ -477,11 +537,11 @@ class AprilTagMapSlamNode(object):
         ps.header.frame_id = "map"
 
         x = self.slam.x
-        ps.pose.position.x = float(x[0, 0])
-        ps.pose.position.y = float(x[1, 0])
+        ps.pose.position.x = float(x[0])
+        ps.pose.position.y = float(x[1])
         ps.pose.position.z = 0.0
 
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         qz = np.sin(yaw / 2.0)
         qw = np.cos(yaw / 2.0)
         ps.pose.orientation.z = qz
@@ -500,11 +560,11 @@ class AprilTagMapSlamNode(object):
         odom.child_frame_id = "base_link"
 
         x = self.slam.x
-        odom.pose.pose.position.x = float(x[0, 0])
-        odom.pose.pose.position.y = float(x[1, 0])
+        odom.pose.pose.position.x = float(x[0])
+        odom.pose.pose.position.y = float(x[1])
         odom.pose.pose.position.z = 0.0
 
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         odom.pose.pose.orientation.x = 0.0
         odom.pose.pose.orientation.y = 0.0
         odom.pose.pose.orientation.z = np.sin(yaw / 2.0)
@@ -544,11 +604,11 @@ class AprilTagMapSlamNode(object):
         msg.header.frame_id = "map"
 
         x = self.slam.x
-        msg.pose.pose.position.x = float(x[0, 0])
-        msg.pose.pose.position.y = float(x[1, 0])
+        msg.pose.pose.position.x = float(x[0])
+        msg.pose.pose.position.y = float(x[1])
         msg.pose.pose.position.z = 0.0
 
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         msg.pose.pose.orientation.z = np.sin(yaw / 2.0)
         msg.pose.pose.orientation.w = np.cos(yaw / 2.0)
         """         
@@ -589,8 +649,8 @@ class AprilTagMapSlamNode(object):
         # Text markers for landmark IDs
         for i, tag_id in enumerate(self.slam.landmark_ids):
             lm_start = 3 + 2 * i
-            lx = float(self.slam.x[lm_start, 0])
-            ly = float(self.slam.x[lm_start + 1, 0])
+            lx = float(self.slam.x[lm_start])
+            ly = float(self.slam.x[lm_start + 1])
 
             # Add point
             p = Point()
@@ -689,11 +749,11 @@ class AprilTagMapSlamNode(object):
         marker.action = Marker.ADD
         
         x = self.slam.x
-        marker.pose.position.x = float(x[0, 0])
-        marker.pose.position.y = float(x[1, 0])
+        marker.pose.position.x = float(x[0])
+        marker.pose.position.y = float(x[1])
         marker.pose.position.z = 0.02
         
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         marker.pose.orientation.z = np.sin(yaw / 2.0)
         marker.pose.orientation.w = np.cos(yaw / 2.0)
         
@@ -716,11 +776,11 @@ class AprilTagMapSlamNode(object):
         ps = PoseStamped()
         ps.header.stamp = rospy.Time.now()
         ps.header.frame_id = "map"
-        ps.pose.position.x = float(x[0, 0])
-        ps.pose.position.y = float(x[1, 0])
+        ps.pose.position.x = float(x[0])
+        ps.pose.position.y = float(x[1])
         ps.pose.position.z = 0.0
         
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         ps.pose.orientation.z = np.sin(yaw / 2.0)
         ps.pose.orientation.w = np.cos(yaw / 2.0)
         
@@ -741,11 +801,11 @@ class AprilTagMapSlamNode(object):
         t.header.frame_id = "map"
         t.child_frame_id = "base_link"
 
-        t.transform.translation.x = float(x[0, 0])
-        t.transform.translation.y = float(x[1, 0])
+        t.transform.translation.x = float(x[0])
+        t.transform.translation.y = float(x[1])
         t.transform.translation.z = 0.0
 
-        yaw = float(x[2, 0])
+        yaw = float(x[2])
         t.transform.rotation.x = 0.0
         t.transform.rotation.y = 0.0
         t.transform.rotation.z = np.sin(yaw / 2.0)
