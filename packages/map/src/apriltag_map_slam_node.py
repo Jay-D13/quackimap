@@ -21,6 +21,8 @@ class AprilTagMapSlamNode(object):
         self.veh = rospy.get_param("~veh", "")
         self.image_topic = rospy.get_param("~image_topic", "/camera/compressed")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        self.gt_topic = rospy.get_param("~gt_topic", "/ground_truth/odom")  # Ground truth topic (Pose type)
+        self.use_gt = rospy.get_param("~use_ground_truth", True)
         self.camera_params = None
         self.camera_info_topic = rospy.get_param(
             "~camera_info_topic", "/camera_node/camera_info"
@@ -80,6 +82,14 @@ class AprilTagMapSlamNode(object):
             self.odom_topic, Odometry, self.odom_cb, queue_size=50
         )
         
+        # Ground truth subscriber - accepts Pose messages (from gt_pose_visualizer_node)
+        if self.use_gt:
+            self.gt_sub = rospy.Subscriber(
+                self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
+            )
+            # Ground truth path publisher
+            self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
+
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
         self.pose_cov_pub = rospy.Publisher("slam_pose_cov", PoseWithCovarianceStamped, queue_size=10)
@@ -96,12 +106,9 @@ class AprilTagMapSlamNode(object):
         self.gt_odom_pub = rospy.Publisher("gt_odom", Odometry, queue_size=10)
         """ 
 
-        # Ground truth path publisher
-        self.gt_path_pub = rospy.Publisher("gt_path", Path, queue_size=10)
-        
         # Debug image publisher - shows detected AprilTags
         self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
-        self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
+        #self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
 
         # TF broadcaster for RViz visualization
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
@@ -114,6 +121,7 @@ class AprilTagMapSlamNode(object):
         rospy.loginfo("AprilTag MAP-SLAM node initialized")
         rospy.loginfo(f"  Image topic: {self.image_topic}")
         rospy.loginfo(f"  Odom topic: {self.odom_topic}")
+        rospy.loginfo(f"  GT topic: {self.gt_topic}")
         rospy.loginfo(f"  Tag size: {self.tag_size}m")
 
     def camera_info_cb(self, msg: CameraInfo):
@@ -235,7 +243,9 @@ class AprilTagMapSlamNode(object):
         # No graph update here; MapSlam2D is only updated in image_cb when tags are seen.
 
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
-    def image_cb(self, msg: CompressedImage): # TODO
+    def image_cb(self, msg: CompressedImage):
+
+        #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY KEYFRAMES OTHERWISE 
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
             return
@@ -261,18 +271,12 @@ class AprilTagMapSlamNode(object):
 
 
         # We need accumulated odometry to integrate between keyframe poses
-        # Minimum time between keyframes to ensure meaningful motion
-        MIN_KEYFRAME_INTERVAL = 0.15  # seconds
-        
-        if self.last_odom_time is None or self.acc_dt < MIN_KEYFRAME_INTERVAL:
+        if self.last_odom_time is None or self.acc_dt <= 0.0:
             rospy.logwarn_throttle(
                 5.0,
-                f"Got AprilTag detections but insufficient accumulated odometry "
-                f"(acc_dt={self.acc_dt:.3f}s, need >={MIN_KEYFRAME_INTERVAL}s); "
-                f"will add pose when more odometry arrives.",
+                "Got AprilTag detections but no valid accumulated odometry; "
+                "skipping pose node add in MapSlam2D.",
             )
-            # Don't reset accumulators - let odometry keep accumulating
-            # Just log and continue to visualization
         else:
             # Average velocities over the accumulated interval
             v_avg = self.acc_vdt / self.acc_dt
@@ -360,6 +364,64 @@ class AprilTagMapSlamNode(object):
                 5.0,
                 f"Number of landmarks in state vector ({num_landmarks}) does not match SLAM landmark IDs ({len(self.slam.landmark_ids)}).",
             )
+
+        # --- Publish optimized landmarks as MarkerArray ---
+        if num_landmarks > 0 and lm_dim >= 2:
+            lm_markers = MarkerArray()
+
+            # Points marker for all optimized landmarks
+            points_marker = Marker()
+            points_marker.header.stamp = rospy.Time.now()
+            points_marker.header.frame_id = "map"
+            points_marker.ns = "opt_landmark_points"
+            points_marker.id = 0
+            points_marker.type = Marker.POINTS
+            points_marker.action = Marker.ADD
+            points_marker.scale.x = 0.08
+            points_marker.scale.y = 0.08
+            points_marker.color.r = 0.0
+            points_marker.color.g = 0.0
+            points_marker.color.b = 1.0
+            points_marker.color.a = 1.0
+            points_marker.lifetime = rospy.Duration(0)
+
+            for i, tag_id in enumerate(self.slam.landmark_ids):
+                base = 3 * num_poses + 2 * i
+                if base + 1 >= N:
+                    break
+
+                lx = float(all_states[base])
+                ly = float(all_states[base + 1])
+
+                # Add point
+                p = Point()
+                p.x = lx
+                p.y = ly
+                p.z = 0.0
+                points_marker.points.append(p)
+
+                # Add text label
+                text_marker = Marker()
+                text_marker.header.stamp = rospy.Time.now()
+                text_marker.header.frame_id = "map"
+                text_marker.ns = "opt_landmark_labels"
+                text_marker.id = i + 100
+                text_marker.type = Marker.TEXT_VIEW_FACING
+                text_marker.action = Marker.ADD
+                text_marker.pose.position.x = lx
+                text_marker.pose.position.y = ly
+                text_marker.pose.position.z = 0.15
+                text_marker.scale.z = 0.1
+                text_marker.color.r = 1.0
+                text_marker.color.g = 1.0
+                text_marker.color.b = 0.0
+                text_marker.color.a = 1.0
+                text_marker.text = f"Tag {tag_id}"
+                text_marker.lifetime = rospy.Duration(0)
+                lm_markers.markers.append(text_marker)
+
+            lm_markers.markers.append(points_marker)
+            self.lm_pub.publish(lm_markers)
 
         # Build optimized path from pose segment of all_states
         opt_path = Path()
@@ -450,6 +512,7 @@ class AprilTagMapSlamNode(object):
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing compressed debug image: {e}")
 
+        """ 
         # Also publish raw for rqt_image_view
         try:
             raw_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
@@ -457,15 +520,15 @@ class AprilTagMapSlamNode(object):
             self.debug_img_raw_pub.publish(raw_msg)
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing raw debug image: {e}")
-
+        """
     # ---------- PUBLISH ----------
     def publish_all(self):
         """Publish all visualization data."""
         self.publish_pose()
         #self.publish_pose_with_covariance()
         self.publish_slam_odometry()
-        self.publish_landmarks()
-        self.publish_path()
+        #self.publish_landmarks()
+        #self.publish_path()
         self.publish_tf()
 
     def publish_pose(self): # TODO
@@ -565,10 +628,6 @@ class AprilTagMapSlamNode(object):
 
     def publish_landmarks(self): # TODO
         """Publish landmark markers for RViz visualization."""
-        # Don't publish if no landmarks or no optimized state yet
-        if not self.slam.landmark_ids or self.slam.optimized_state is None:
-            return
-        
         ma = MarkerArray()
         
         # Points marker for all landmarks
@@ -587,21 +646,11 @@ class AprilTagMapSlamNode(object):
         points_marker.color.a = 1.0
         points_marker.lifetime = rospy.Duration(0)
 
-        # Collect valid landmarks
-        valid_landmarks = []
-        for tag_id in self.slam.landmark_ids:
-            lm_pos = self.slam.get_landmark_position(tag_id)
-            if lm_pos is not None:
-                valid_landmarks.append((tag_id, lm_pos))
-        
-        # Only publish if we have valid landmarks
-        if not valid_landmarks:
-            return
-        
-        # Add points
-        for i, (tag_id, lm_pos) in enumerate(valid_landmarks):
-            lx = float(lm_pos[0])
-            ly = float(lm_pos[1])
+        # Text markers for landmark IDs
+        for i, tag_id in enumerate(self.slam.landmark_ids):
+            lm_start = 3 + 2 * i
+            lx = float(self.slam.x[lm_start])
+            ly = float(self.slam.x[lm_start + 1])
 
             # Add point
             p = Point()
@@ -615,7 +664,7 @@ class AprilTagMapSlamNode(object):
             text_marker.header.stamp = rospy.Time.now()
             text_marker.header.frame_id = "map"
             text_marker.ns = "landmark_labels"
-            text_marker.id = tag_id + 100
+            text_marker.id = i + 100
             text_marker.type = Marker.TEXT_VIEW_FACING
             text_marker.action = Marker.ADD
             text_marker.pose.position.x = lx
@@ -629,6 +678,11 @@ class AprilTagMapSlamNode(object):
             text_marker.text = f"Tag {tag_id}"
             text_marker.lifetime = rospy.Duration(0)
             ma.markers.append(text_marker)
+
+            # Add covariance ellipse
+            ellipse_marker = self.create_covariance_ellipse(i, lx, ly)
+            if ellipse_marker is not None:
+                ma.markers.append(ellipse_marker)
 
         ma.markers.append(points_marker)
         
