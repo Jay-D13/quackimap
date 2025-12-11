@@ -55,7 +55,7 @@ Visualization Manager:
       Class: rviz/Odometry
       Covariance:
         Orientation:
-          Alpha: 0.5
+          Alpha: 0.0
           Color: 255; 255; 127
           Color Style: Unique
           Frame: Local
@@ -63,7 +63,7 @@ Visualization Manager:
           Scale: 1
           Value: true
         Position:
-          Alpha: 0.30000001192092896
+          Alpha: 0.0
           Color: 0; 255; 0
           Scale: 1
           Value: true
@@ -90,7 +90,7 @@ Visualization Manager:
       Class: rviz/Odometry
       Covariance:
         Orientation:
-          Alpha: 0.5
+          Alpha: 0.0
           Color: 255; 255; 127
           Color Style: Unique
           Frame: Local
@@ -98,7 +98,7 @@ Visualization Manager:
           Scale: 1
           Value: false
         Position:
-          Alpha: 0.30000001192092896
+          Alpha: 0.0
           Color: 0; 170; 255
           Scale: 1
           Value: false
