@@ -37,6 +37,10 @@ class AprilTagMapSlamNode(object):
 
         # Backend SLAM filter
         self.slam = MapSlam2D()
+        # Throttle image processing: use only 1 out of N images
+        self.stride = rospy.get_param("~image_stride", 3)
+        self.image_counter = 0
+
         self.last_odom_time = None
         self.last_pose_time = None  # time stamp of last pose added to MapSlam2D
 
@@ -245,7 +249,14 @@ class AprilTagMapSlamNode(object):
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
     def image_cb(self, msg: CompressedImage):
 
-        #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY KEYFRAMES OTHERWISE 
+        # Simple stride-based throttling: only process 1 out of `self.stride` images
+        self.image_counter += 1
+        if self.image_counter < self.stride:
+            return
+        # Reset counter when we actually process a frame
+        self.image_counter = 0
+
+        #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY 
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
             return
@@ -345,112 +356,11 @@ class AprilTagMapSlamNode(object):
         if all_states is None:
             return
 
-        all_states = np.asarray(all_states).ravel()
-        N = all_states.size
-        num_poses = len(self.slam.poses)
-        num_landmarks = len(self.slam.landmark_ids)
-
-        # infer number of landmarks from the tail of the vector
-        lm_dim = N - 3 * num_poses
-        if lm_dim % 2 != 0:
-            rospy.logwarn_throttle(
-                5.0,
-                f"Landmark segment length {lm_dim} is not divisible by 2; landmarks ignored in this step.",
-            )
-        num_landmarks = lm_dim // 2  # currently unused, but derived from all_states shape
-
-        if num_landmarks != len(self.slam.landmark_ids):
-            rospy.logwarn_throttle(
-                5.0,
-                f"Number of landmarks in state vector ({num_landmarks}) does not match SLAM landmark IDs ({len(self.slam.landmark_ids)}).",
-            )
-
-        # --- Publish optimized landmarks as MarkerArray ---
-        if num_landmarks > 0 and lm_dim >= 2:
-            lm_markers = MarkerArray()
-
-            # Points marker for all optimized landmarks
-            points_marker = Marker()
-            points_marker.header.stamp = rospy.Time.now()
-            points_marker.header.frame_id = "map"
-            points_marker.ns = "opt_landmark_points"
-            points_marker.id = 0
-            points_marker.type = Marker.POINTS
-            points_marker.action = Marker.ADD
-            points_marker.scale.x = 0.08
-            points_marker.scale.y = 0.08
-            points_marker.color.r = 0.0
-            points_marker.color.g = 0.0
-            points_marker.color.b = 1.0
-            points_marker.color.a = 1.0
-            points_marker.lifetime = rospy.Duration(0)
-
-            for i, tag_id in enumerate(self.slam.landmark_ids):
-                base = 3 * num_poses + 2 * i
-                if base + 1 >= N:
-                    break
-
-                lx = float(all_states[base])
-                ly = float(all_states[base + 1])
-
-                # Add point
-                p = Point()
-                p.x = lx
-                p.y = ly
-                p.z = 0.0
-                points_marker.points.append(p)
-
-                # Add text label
-                text_marker = Marker()
-                text_marker.header.stamp = rospy.Time.now()
-                text_marker.header.frame_id = "map"
-                text_marker.ns = "opt_landmark_labels"
-                text_marker.id = i + 100
-                text_marker.type = Marker.TEXT_VIEW_FACING
-                text_marker.action = Marker.ADD
-                text_marker.pose.position.x = lx
-                text_marker.pose.position.y = ly
-                text_marker.pose.position.z = 0.15
-                text_marker.scale.z = 0.1
-                text_marker.color.r = 1.0
-                text_marker.color.g = 1.0
-                text_marker.color.b = 0.0
-                text_marker.color.a = 1.0
-                text_marker.text = f"Tag {tag_id}"
-                text_marker.lifetime = rospy.Duration(0)
-                lm_markers.markers.append(text_marker)
-
-            lm_markers.markers.append(points_marker)
-            self.lm_pub.publish(lm_markers)
-
-        # Build optimized path from pose segment of all_states
-        opt_path = Path()
-        opt_path.header.stamp = rospy.Time.now()
-        opt_path.header.frame_id = "map"
-
-        for k in range(num_poses):
-            idx = 3 * k
-            x = float(all_states[idx])
-            y = float(all_states[idx + 1])
-            theta = float(all_states[idx + 2])
-
-            ps = PoseStamped()
-            ps.header.stamp = opt_path.header.stamp
-            ps.header.frame_id = "map"
-            ps.pose.position.x = x
-            ps.pose.position.y = y
-            ps.pose.position.z = 0.0
-
-            qz = np.sin(theta / 2.0)
-            qw = np.cos(theta / 2.0)
-            ps.pose.orientation.z = qz
-            ps.pose.orientation.w = qw
-
-            opt_path.poses.append(ps)
-
-        # Replace current path with optimized one and publish
-        self.path = opt_path
-        self.path_pub.publish(opt_path)
+        # After optimization, MapSlam2D.update() has stored
+        # the full optimized state in self.slam.last_optimized_state.
+        # Publish path and landmarks from that optimized state.
+        self.publish_path()
+        self.publish_landmarks()
 
     def draw_detections(self, img, detections):
         """Draw AprilTag detections on image for debugging."""
@@ -512,22 +422,13 @@ class AprilTagMapSlamNode(object):
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing compressed debug image: {e}")
 
-        """ 
-        # Also publish raw for rqt_image_view
-        try:
-            raw_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
-            raw_msg.header.stamp = stamp
-            self.debug_img_raw_pub.publish(raw_msg)
-        except Exception as e:
-            rospy.logwarn_throttle(5.0, f"Error publishing raw debug image: {e}")
-        """
     # ---------- PUBLISH ----------
     def publish_all(self):
         """Publish all visualization data."""
         self.publish_pose()
         #self.publish_pose_with_covariance()
         self.publish_slam_odometry()
-        #self.publish_landmarks()
+        #self.publish_landmarks()`y`
         #self.publish_path()
         self.publish_tf()
 
@@ -626,8 +527,24 @@ class AprilTagMapSlamNode(object):
         """
         self.pose_cov_pub.publish(msg)
 
-    def publish_landmarks(self): # TODO
+    def publish_landmarks(self):  # TODO
         """Publish landmark markers for RViz visualization."""
+        # Use optimized state if available
+        if self.slam.last_optimized_state is None:
+            return
+
+        all_states = np.asarray(self.slam.last_optimized_state).ravel()
+        num_poses = len(self.slam.poses)
+        num_landmarks = len(self.slam.landmark_ids)
+
+        expected_len = 3 * num_poses + 2 * num_landmarks
+        if all_states.size < expected_len:
+            rospy.logwarn_throttle(
+                5.0,
+                f"Optimized state too short for poses+landmarks "
+                f"({all_states.size} < {expected_len}); skipping landmark publish.",
+            )
+            return
         ma = MarkerArray()
         
         # Points marker for all landmarks
@@ -646,11 +563,14 @@ class AprilTagMapSlamNode(object):
         points_marker.color.a = 1.0
         points_marker.lifetime = rospy.Duration(0)
 
-        # Text markers for landmark IDs
+        # Text markers for landmark IDs from optimized state
         for i, tag_id in enumerate(self.slam.landmark_ids):
-            lm_start = 3 + 2 * i
-            lx = float(self.slam.x[lm_start])
-            ly = float(self.slam.x[lm_start + 1])
+            lm_base = 3 * num_poses + 2 * i
+            if lm_base + 1 >= all_states.size:
+                break
+
+            lx = float(all_states[lm_base])
+            ly = float(all_states[lm_base + 1])
 
             # Add point
             p = Point()
@@ -679,64 +599,14 @@ class AprilTagMapSlamNode(object):
             text_marker.lifetime = rospy.Duration(0)
             ma.markers.append(text_marker)
 
-            # Add covariance ellipse
-            ellipse_marker = self.create_covariance_ellipse(i, lx, ly)
-            if ellipse_marker is not None:
-                ma.markers.append(ellipse_marker)
-
         ma.markers.append(points_marker)
         
-        # Add robot marker
+        # Add robot marker (still uses incremental self.slam.x)
         robot_marker = self.create_robot_marker()
         ma.markers.append(robot_marker)
 
         self.lm_pub.publish(ma)
 
-    def create_covariance_ellipse(self, idx, lx, ly): # TODO
-        """Create a marker showing the covariance ellipse for a landmark."""
-        lm_start = 3 + 2 * idx
-        if lm_start + 1 >= self.slam.P.shape[0]:
-            return None
-
-        # Extract 2x2 covariance for this landmark
-        P_lm = self.slam.P[lm_start:lm_start+2, lm_start:lm_start+2]
-        
-        # Compute eigenvalues/eigenvectors for ellipse
-        try:
-            eigenvalues, eigenvectors = np.linalg.eigh(P_lm)
-            # 95% confidence ellipse (chi-squared with 2 DOF, 95% = 5.991)
-            scale = np.sqrt(5.991)
-            
-            marker = Marker()
-            marker.header.stamp = rospy.Time.now()
-            marker.header.frame_id = "map"
-            marker.ns = "landmark_covariance"
-            marker.id = idx + 200
-            marker.type = Marker.CYLINDER
-            marker.action = Marker.ADD
-            marker.pose.position.x = lx
-            marker.pose.position.y = ly
-            marker.pose.position.z = -0.01
-            
-            # Orientation from eigenvector
-            angle = np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0])
-            marker.pose.orientation.z = np.sin(angle / 2.0)
-            marker.pose.orientation.w = np.cos(angle / 2.0)
-            
-            # Scale from eigenvalues
-            marker.scale.x = scale * np.sqrt(max(eigenvalues[0], 1e-6)) * 2
-            marker.scale.y = scale * np.sqrt(max(eigenvalues[1], 1e-6)) * 2
-            marker.scale.z = 0.01
-            
-            marker.color.r = 1.0
-            marker.color.g = 0.5
-            marker.color.b = 0.0
-            marker.color.a = 0.3
-            marker.lifetime = rospy.Duration(0)
-            
-            return marker
-        except Exception:
-            return None
 
     def create_robot_marker(self): # TODO
         """Create an arrow marker showing the robot pose."""
@@ -769,28 +639,66 @@ class AprilTagMapSlamNode(object):
         
         return marker
 
-    def publish_path(self): # TODO
-        """Publish the robot's path history."""
-        x = self.slam.x
-        
-        ps = PoseStamped()
-        ps.header.stamp = rospy.Time.now()
-        ps.header.frame_id = "map"
-        ps.pose.position.x = float(x[0])
-        ps.pose.position.y = float(x[1])
-        ps.pose.position.z = 0.0
-        
-        yaw = float(x[2])
-        ps.pose.orientation.z = np.sin(yaw / 2.0)
-        ps.pose.orientation.w = np.cos(yaw / 2.0)
-        
-        # Add to path (limit to last 1000 poses)
-        self.path.poses.append(ps)
-        if len(self.path.poses) > 1000:
-            self.path.poses = self.path.poses[-1000:]
-        
-        self.path.header.stamp = rospy.Time.now()
-        self.path_pub.publish(self.path)
+    def publish_path(self):  # TODO
+        """Publish the robot's path history from the last optimized state."""
+        # Use optimized state if available
+        if self.slam.last_optimized_state is None:
+            # Fallback: keep previous incremental behavior
+            x = self.slam.x
+            ps = PoseStamped()
+            ps.header.stamp = rospy.Time.now()
+            ps.header.frame_id = "map"
+            ps.pose.position.x = float(x[0])
+            ps.pose.position.y = float(x[1])
+            ps.pose.position.z = 0.0
+            yaw = float(x[2])
+            ps.pose.orientation.z = np.sin(yaw / 2.0)
+            ps.pose.orientation.w = np.cos(yaw / 2.0)
+            self.path.poses.append(ps)
+            if len(self.path.poses) > 1000:
+                self.path.poses = self.path.poses[-1000:]
+            self.path.header.stamp = rospy.Time.now()
+            self.path_pub.publish(self.path)
+            return
+
+        all_states = np.asarray(self.slam.last_optimized_state).ravel()
+        num_poses = len(self.slam.poses)
+
+        if all_states.size < 3 * num_poses:
+            rospy.logwarn_throttle(
+                5.0,
+                f"Optimized state too short for poses "
+                f"({all_states.size} < {3 * num_poses}); skipping path publish.",
+            )
+            return
+
+        opt_path = Path()
+        opt_path.header.stamp = rospy.Time.now()
+        opt_path.header.frame_id = "map"
+
+        for k in range(num_poses):
+            idx = 3 * k
+            x = float(all_states[idx])
+            y = float(all_states[idx + 1])
+            theta = float(all_states[idx + 2])
+
+            ps = PoseStamped()
+            ps.header.stamp = opt_path.header.stamp
+            ps.header.frame_id = "map"
+            ps.pose.position.x = x
+            ps.pose.position.y = y
+            ps.pose.position.z = 0.0
+
+            qz = np.sin(theta / 2.0)
+            qw = np.cos(theta / 2.0)
+            ps.pose.orientation.z = qz
+            ps.pose.orientation.w = qw
+
+            opt_path.poses.append(ps)
+
+        # Replace current path with optimized one and publish
+        self.path = opt_path
+        self.path_pub.publish(opt_path)
 
     def publish_tf(self): # TODO
         """Publish TF transform from map to base_link for RViz visualization."""

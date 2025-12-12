@@ -20,6 +20,7 @@ class MapSlam2D(object):
             'observations': []
         }] # list of dictionaries containing pose and detection information
         self.landmark_ids = [] # list of tag_ids
+        self.last_optimized_state = None
 
     def add_pose(self, v, w, dt, detections):
         """
@@ -283,6 +284,7 @@ class MapSlam2D(object):
                 if np.linalg.norm(delta) < 1e-6:
                     break
 
+            self.last_optimized_state = state   
         return state
 
     def _get_landmark_index(self, tag_id):
