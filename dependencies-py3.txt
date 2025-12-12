@@ -4,3 +4,4 @@
 numpy<=1.21.0
 duckietown-world-daffy
 ipywidgets
+gtsam

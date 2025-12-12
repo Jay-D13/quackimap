@@ -21,6 +21,8 @@ class AprilTagEkfSlamNode(object):
         self.veh = rospy.get_param("~veh", "")
         self.image_topic = rospy.get_param("~image_topic", "/camera/compressed")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        # self.gt_topic = rospy.get_param("~gt_topic", "/ground_truth/odom")  # Ground truth topic (Pose type)
+        # self.use_gt = rospy.get_param("~use_ground_truth", True)
         self.camera_params = None
         self.camera_info_topic = rospy.get_param(
             "~camera_info_topic", "/camera_node/camera_info"
@@ -32,6 +34,9 @@ class AprilTagEkfSlamNode(object):
 
         # Tag size in meters
         self.tag_size = rospy.get_param("~tag_size", 0.065)
+
+        # AprilTag detector decimation (set to 1.0 to avoid intrinsics mismatch)
+        self.quad_decimate = rospy.get_param("~quad_decimate", 1.0)
 
         # Backend SLAM filter
         self.slam = EkfSlam2D()
@@ -57,12 +62,17 @@ class AprilTagEkfSlamNode(object):
         self.detector = Detector(
             families='tag36h11',
             nthreads=1,
-            quad_decimate=2.0,
+            quad_decimate=float(self.quad_decimate),
             quad_sigma=0.0,
             refine_edges=1,
             decode_sharpening=0.25,
             debug=0,
         )
+        
+        # Stats for logging
+        self.detection_count = 0
+        self.last_detection_time = None
+        self.odom_count = 0
 
         # ROS I/O
         self.bridge = CvBridge()
@@ -73,6 +83,12 @@ class AprilTagEkfSlamNode(object):
         self.odom_sub = rospy.Subscriber(
             self.odom_topic, Odometry, self.odom_cb, queue_size=50
         )
+        
+        # Ground truth subscriber - accepts Pose messages (from gt_pose_visualizer_node)
+        # if self.use_gt:
+        #     self.gt_sub = rospy.Subscriber(
+        #         self.gt_topic, Odometry, self.gt_pose_cb, queue_size=10
+        #     )
 
         # Publishers
         self.pose_pub = rospy.Publisher("slam_pose", PoseStamped, queue_size=10)
@@ -98,14 +114,11 @@ class AprilTagEkfSlamNode(object):
         # TF broadcaster for RViz visualization
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
-        # Stats for logging
-        self.detection_count = 0
-        self.last_detection_time = None
-        self.odom_count = 0
 
         rospy.loginfo("AprilTag EKF-SLAM node initialized")
         rospy.loginfo(f"  Image topic: {self.image_topic}")
         rospy.loginfo(f"  Odom topic: {self.odom_topic}")
+        # rospy.loginfo(f"  GT topic: {self.gt_topic}")
         rospy.loginfo(f"  Tag size: {self.tag_size}m")
 
     def camera_info_cb(self, msg: CameraInfo):
@@ -262,6 +275,18 @@ class AprilTagEkfSlamNode(object):
 
             z = np.array([r, bearing])
             self.slam.update(tag_id, z)
+
+            # Log gating diagnostics (useful to see if tags are being rejected)
+            if getattr(self.slam, 'last_update_accepted', None) is False:
+                md2 = getattr(self.slam, 'last_update_mahal_dist_sq', None)
+                gate = getattr(self.slam, 'mahal_gate', None)
+                if md2 is not None and gate is not None:
+                    rospy.logwarn_throttle(1.0, f"EKF update REJECTED tag {tag_id}: mahal^2={md2:.2f} > {gate:.2f}")
+                else:
+                    rospy.logwarn_throttle(1.0, f"EKF update REJECTED tag {tag_id}")
+            elif getattr(self.slam, 'last_update_was_new_landmark', None) is True:
+                rospy.loginfo_throttle(1.0, f"EKF initialized new landmark: tag {tag_id}")
+
 
             self.detection_count += 1
             self.last_detection_time = rospy.Time.now()
@@ -505,7 +530,45 @@ class AprilTagEkfSlamNode(object):
         robot_marker = self.create_robot_marker()
         ma.markers.append(robot_marker)
 
+        # Add trajectory marker
+        traj_marker = self.create_trajectory_marker()
+        ma.markers.append(traj_marker)
+
         self.lm_pub.publish(ma)
+
+
+    def create_trajectory_marker(self):
+        """Create a LINE_STRIP marker of the robot trajectory.
+
+        RViz can update this marker "in place" (unlike the Odometry display trail).
+        We attach it to the same MarkerArray topic as the landmarks.
+        """
+        marker = Marker()
+        marker.header.stamp = rospy.Time.now()
+        marker.header.frame_id = "map"
+        marker.ns = "trajectory"
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.03  # line width (m)
+
+        # Blue-ish line
+        marker.color.r = 0.0
+        marker.color.g = 0.4
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+
+        marker.lifetime = rospy.Duration(0)
+
+        # Use the already-maintained Path history
+        for ps in self.path.poses:
+            pt = Point()
+            pt.x = float(ps.pose.position.x)
+            pt.y = float(ps.pose.position.y)
+            pt.z = 0.01
+            marker.points.append(pt)
+
+        return marker
 
     def create_covariance_ellipse(self, idx, lx, ly):
         """Create a marker showing the covariance ellipse for a landmark."""

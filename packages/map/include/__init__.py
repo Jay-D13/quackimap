@@ -1,2 +1,1 @@
-from .map_slam import MapSlam2D
-from .graph_slam import LightweightGraphSlam2D
+from .map_slam_backend import MapSlam2D
