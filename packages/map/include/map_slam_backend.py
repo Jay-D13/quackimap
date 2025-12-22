@@ -63,6 +63,7 @@ class MapSlam2D:
         params = gtsam.ISAM2Params()
         params.setRelinearizeThreshold(0.1)
         params.relinearizeSkip = 1
+        self._isam_params = params  # store for later reuse in _reset_isam_from_current
         self.isam = gtsam.ISAM2(params)
 
         # Current estimate Values

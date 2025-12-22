@@ -304,8 +304,18 @@ class AprilTagMapSlamNode:
         od.pose.pose = ps.pose
         self.pub_odom.publish(od)
 
+        # Rebuild full path from all current SLAM poses (uses optimized states after batch_optimize)
         self.path_msg.header.stamp = now
-        self.path_msg.poses.append(ps)
+        self.path_msg.poses = []
+        for px, py, pth in self.slam.get_all_poses():
+            p_ps = PoseStamped()
+            p_ps.header.stamp = now
+            p_ps.header.frame_id = "map"
+            p_ps.pose.position.x = px
+            p_ps.pose.position.y = py
+            p_ps.pose.orientation.z = math.sin(pth / 2.0)
+            p_ps.pose.orientation.w = math.cos(pth / 2.0)
+            self.path_msg.poses.append(p_ps)
         self.pub_path.publish(self.path_msg)
 
         self.pub_landmarks.publish(self.create_landmark_markers())
