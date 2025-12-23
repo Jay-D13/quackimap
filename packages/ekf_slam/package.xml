@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>map</name>
+  <name>ekf_slam</name>
   <version>0.0.1</version>
-  <description>AprilTag MAP SLAM for Duckiebot</description>
+  <description>AprilTag EKF SLAM for Duckiebot</description>
 
   <maintainer email="jaydan.aladro@umontreal.ca">Jaydan, Arielle, Dalil</maintainer>
   <license>MIT</license>

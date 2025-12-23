@@ -1,31 +1,30 @@
 import numpy as np
 import threading
 
-class EkfSlam2D(object):
+class EkfSlam2D:
+    """2D EKF-SLAM with AprilTag landmarks. State: [x, y, theta, l1_x, l1_y, ...]"""
+
     def __init__(self):
-        # State: [x, y, theta, l1_x, l1_y, l2_x, l2_y, ...]^T
         self.x = np.zeros((3, 1))
-        self.P = np.eye(3) * 1e-3  # small initial uncertainty
-        self.landmark_ids = []      # order of tag IDs in the state
+        self.P = np.eye(3) * 1e-3
+        self.landmark_ids = []
 
-        # Motion noise (for [x, y, theta])
-        self.Q = np.diag([0.08, 0.08, np.deg2rad(8.0)]) ** 2
+        # Noise parameters
+        self.Q = np.diag([0.08, 0.08, np.deg2rad(8.0)]) ** 2  # motion
+        self.R = np.diag([0.10, np.deg2rad(3.5)]) ** 2        # measurement
 
-        # Measurement noise (for [range, bearing])
-        self.R = np.diag([0.10, np.deg2rad(3.0)]) ** 2
-
-        # Mahalanobis gate threshold (chi-squared, 2 DOF). 99% ~= 9.21
-        self.mahal_gate = 25 #9.21
-        
-        # if a measurement is rejected, inflate robot covariance and retry once
-        # if > 1.0: gets enabled
+        # Mahalanobis gate (chi-squared, 2 DOF, 99%)
+        self.mahal_gate = 9.21
         self.recovery_inflate_factor = 1.0
 
-        # Diagnostics for the last update
+        # Diagnostics
         self.last_update_tag_id = None
         self.last_update_accepted = None
         self.last_update_mahal_dist_sq = None
         self.last_update_was_new_landmark = None
+        self.last_z = None
+        self.last_z_hat = None
+        self.last_innovation = None
 
         # Lock to prevent race conditions between predict and update
         self._lock = threading.Lock()
@@ -35,9 +34,16 @@ class EkfSlam2D(object):
             return self.landmark_ids.index(tag_id)
         except ValueError:
             return -1
+        
+    def _get_measurement_noise(self, range_m):
+        """Dynamic measurement noise based on distance."""
+        sigma_range = 0.05 + 0.10 * range_m
+        sigma_bearing = np.deg2rad(3.0 + range_m)
+        return np.diag([sigma_range, sigma_bearing]) ** 2
 
     def predict(self, v, w, dt):
         """
+        Unicycle motion model prediction.
         v: linear velocity (m/s)
         w: angular velocity (rad/s)
         dt: time step (s)
@@ -112,59 +118,45 @@ class EkfSlam2D(object):
 
             accepted = self._do_update(lm_index, self.last_z)
 
-            # Optional recovery: inflate pose covariance and retry once
-            if (not accepted) and float(self.recovery_inflate_factor) > 1.0:
-                f = float(self.recovery_inflate_factor)
-                self.P[0:3, 0:3] *= f
+            if not accepted and self.recovery_inflate_factor > 1.0:
+                self.P[0:3, 0:3] *= self.recovery_inflate_factor
                 accepted = self._do_update(lm_index, self.last_z)
 
             self.last_update_accepted = bool(accepted)
             self.last_update_was_new_landmark = False
 
     def _do_update(self, lm_index, z):
-        """Return True if update accepted."""
+        """Perform EKF update. Returns True if accepted."""
         lm_start = 3 + 2 * lm_index
-        lx = float(self.x[lm_start, 0])
-        ly = float(self.x[lm_start + 1, 0])
-
+        lx, ly = float(self.x[lm_start, 0]), float(self.x[lm_start + 1, 0])
         rx, ry, rtheta = float(self.x[0, 0]), float(self.x[1, 0]), float(self.x[2, 0])
 
-        dx = lx - rx
-        dy = ly - ry
+        dx, dy = lx - rx, ly - ry
         q = dx**2 + dy**2
         sqrt_q = np.sqrt(q)
         if sqrt_q < 1e-9:
             return False
 
-        z_hat = np.zeros((2, 1))
-        z_hat[0, 0] = sqrt_q
-        z_hat[1, 0] = self._wrap_angle(np.arctan2(dy, dx) - rtheta)
-
+        # Predicted measurement
+        z_hat = np.array([[sqrt_q], [self._wrap_angle(np.arctan2(dy, dx) - rtheta)]])
         self.last_z_hat = z_hat.copy()
 
+        # Jacobian
         n = self.x.shape[0]
         H = np.zeros((2, n))
+        H[0, 0], H[0, 1] = -dx / sqrt_q, -dy / sqrt_q
+        H[1, 0], H[1, 1], H[1, 2] = dy / q, -dx / q, -1.0
+        H[0, lm_start], H[0, lm_start + 1] = dx / sqrt_q, dy / sqrt_q
+        H[1, lm_start], H[1, lm_start + 1] = -dy / q, dx / q
 
-        # w.r.t robot pose
-        H[0, 0] = -dx / sqrt_q
-        H[0, 1] = -dy / sqrt_q
-        H[0, 2] = 0.0
-
-        H[1, 0] = dy / q
-        H[1, 1] = -dx / q
-        H[1, 2] = -1.0
-
-        # w.r.t landmark position
-        H[0, lm_start] = dx / sqrt_q
-        H[0, lm_start + 1] = dy / sqrt_q
-        H[1, lm_start] = -dy / q
-        H[1, lm_start + 1] = dx / q
-
+        # Innovation
         y = z - z_hat
         y[1, 0] = self._wrap_angle(y[1, 0])
         self.last_innovation = y.copy()
 
-        S = H @ self.P @ H.T + self.R
+        R_dyn = self._get_measurement_noise(float(z[0, 0]))
+        S = H @ self.P @ H.T + R_dyn
+
         try:
             S_inv = np.linalg.inv(S)
         except np.linalg.LinAlgError:
@@ -173,66 +165,61 @@ class EkfSlam2D(object):
         mahal_dist_sq = float(y.T @ S_inv @ y)
         self.last_update_mahal_dist_sq = mahal_dist_sq
 
-        if mahal_dist_sq > float(self.mahal_gate):
+        if mahal_dist_sq > self.mahal_gate:
             return False
 
         K = self.P @ H.T @ S_inv
-
         self.x = self.x + K @ y
 
         I = np.eye(self.P.shape[0])
         IKH = I - K @ H
         self.P = IKH @ self.P @ IKH.T + K @ self.R @ K.T
-
         self.x[2, 0] = self._wrap_angle(float(self.x[2, 0]))
         return True
 
     def _initialize_landmark(self, tag_id, z):
-        r = float(z[0])
-        b = float(z[1])
+        """Initialize a new landmark from measurement."""
+        r, b = float(z[0]), float(z[1])
         rx, ry, rtheta = float(self.x[0, 0]), float(self.x[1, 0]), float(self.x[2, 0])
 
         lx = rx + r * np.cos(rtheta + b)
         ly = ry + r * np.sin(rtheta + b)
 
-        # Jacobian w.r.t [rx, ry, theta]
-        G_r = np.zeros((2, 3))
-        G_r[0, 0] = 1.0
-        G_r[0, 2] = -r * np.sin(rtheta + b)
-        G_r[1, 1] = 1.0
-        G_r[1, 2] =  r * np.cos(rtheta + b)
+        # Jacobian w.r.t [rx, ry, theta] (robot pose)
+        G_r = np.array([
+            [1.0, 0.0, -r * np.sin(rtheta + b)],
+            [0.0, 1.0,  r * np.cos(rtheta + b)]
+        ])
 
-        # Jacobian w.r.t [r, b]
-        G_z = np.zeros((2, 2))
-        G_z[0, 0] = np.cos(rtheta + b)
-        G_z[0, 1] = -r * np.sin(rtheta + b)
-        G_z[1, 0] = np.sin(rtheta + b)
-        G_z[1, 1] =  r * np.cos(rtheta + b)
+        # Jacobian w.r.t [r, b] (measurement)
+        G_z = np.array([
+            [np.cos(rtheta + b), -r * np.sin(rtheta + b)],
+            [np.sin(rtheta + b),  r * np.cos(rtheta + b)]
+        ])
 
-        self.x = np.vstack([self.x, np.array([[lx], [ly]])])
+        # Expand state
+        self.x = np.vstack([self.x, [[lx], [ly]]])
 
+        # Expand covariance
         n_old = self.P.shape[0]
         P_new = np.zeros((n_old + 2, n_old + 2))
-        P_new[0:n_old, 0:n_old] = self.P
+        P_new[:n_old, :n_old] = self.P
 
-        P_rr = self.P[0:3, 0:3]
-        P_ll = G_r @ P_rr @ G_r.T + G_z @ self.R @ G_z.T
-
-        # Extra uncertainty on first observation (helps prevent early over-confidence)
-        P_ll += np.eye(2) * (0.15 ** 2)
+        R_dyn = self._get_measurement_noise(r)
+        P_ll = G_r @ self.P[:3, :3] @ G_r.T + G_z @ R_dyn @ G_z.T
+        P_ll += np.eye(2) * (0.5 ** 2)  # 50cm initial uncertainty buffer
 
         P_new[n_old:, n_old:] = P_ll
 
-        # Cross-covariance robot <-> landmark
-        P_rl = self.P[0:3, 0:3] @ G_r.T
-        P_new[0:3, n_old:] = P_rl
-        P_new[n_old:, 0:3] = P_rl.T
-
+        # Cross-covariance
+        P_rl = self.P[:3, :3] @ G_r.T
+        P_new[:3, n_old:] = P_rl
+        P_new[n_old:, :3] = P_rl.T
+        
         # Cross-cov existing landmarks <-> new landmark through robot
         for i in range(len(self.landmark_ids)):
             lm_start = 3 + 2 * i
-            P_li_r = self.P[lm_start:lm_start + 2, 0:3]
-            P_li_new = P_li_r @ G_r.T
+            P_li_new = self.P[lm_start:lm_start + 2, :3] @ G_r.T
             P_new[lm_start:lm_start + 2, n_old:] = P_li_new
             P_new[n_old:, lm_start:lm_start + 2] = P_li_new.T
 

@@ -13,7 +13,7 @@ import cv2
 from std_srvs.srv import Trigger, TriggerResponse
 
 from dt_apriltags import Detector
-from map.include.map_slam_backend import MapSlam2D
+from packages.gtsam_slam.include.gtsam_slam_backend import MapSlam2D
 
 
 def wrap_angle(a: float) -> float:
