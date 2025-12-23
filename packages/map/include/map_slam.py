@@ -23,6 +23,12 @@ class MapSlam2D(object):
         self.last_optimized_state = None
         self.last_optimized_landmark_ids = None
 
+        # Noise parameters
+        self.sigma_odom_xy = 0.1      # meters (tune)
+        self.sigma_odom_theta = np.deg2rad(6.0)  # rad (tune)
+        self.sigma_range = 0.01        # meters (tune)
+        self.sigma_bearing = np.deg2rad(0.5)     # rad (tune)
+
     def add_pose(self, v, w, dt, detections):
         """
         v: linear velocity (m/s)
@@ -134,6 +140,10 @@ class MapSlam2D(object):
             state[i * 3 + 1] = state[(i - 1) * 3 + 1] + odometry['dy']
             state[i * 3 + 2] = self._wrap_angle(state[(i - 1) * 3 + 2] + odometry['dtheta'])
 
+        # Accumulators for mean: sum_x, sum_y, count per landmark
+        sum_xy = np.zeros((num_landmarks, 2), dtype=float)
+        count = np.zeros((num_landmarks,), dtype=int)
+
         # Landmark states
         for i, pose in enumerate(self.poses):
 
@@ -145,14 +155,28 @@ class MapSlam2D(object):
             for observation in pose['observations']:
                 tag_id = observation['landmark_id']
                 lm_index = self._get_landmark_index(tag_id)
+                if lm_index == -1:
+                    continue  # should not happen
 
                 x_absolute = x + observation['range'] * np.cos(observation['bearing'] + theta)
                 y_absolute = y + observation['range'] * np.sin(observation['bearing'] + theta)
 
-                # Update state with latest landmark value
-                state[num_poses * 3 + lm_index * 2] = x_absolute
-                state[num_poses * 3 + lm_index * 2 + 1] = y_absolute
+                sum_xy[lm_index, 0] += x_absolute
+                sum_xy[lm_index, 1] += y_absolute
+                count[lm_index] += 1
 
+        for k in range(num_landmarks):
+                # Update state with latest landmark value
+            if count[k] > 0:
+                        # Average of all back-projections
+                        lx = sum_xy[k, 0] / count[k]
+                        ly = sum_xy[k, 1] / count[k]
+                        state[num_poses * 3 + 2*k    ] = lx
+                        state[num_poses * 3 + 2*k + 1] = ly
+            else:
+                # No observations: keep warm-start value if it exists, else leave zeros.
+                # (Warm-start copy already happened above.)
+                pass
         return state
 
     def update(self, max_iter=50):
@@ -176,13 +200,23 @@ class MapSlam2D(object):
             # number of residuals to calculate
             n_residuals = (num_poses - 1) * 3 + sum(len(p['observations']) for p in self.poses) * 2
 
+
+            # Precompute weights (whitening factors)
+            whit_x = 1.0 / max(self.sigma_odom_xy, 1e-12)
+            whit_y = 1.0 / max(self.sigma_odom_xy, 1e-12)
+            whit_theta = 1.0 / max(self.sigma_odom_theta, 1e-12)
+            whit_range = 1.0 / max(self.sigma_range, 1e-12)
+            whit_bearing = 1.0 / max(self.sigma_bearing, 1e-12)
+
+            mu = 1e-6  # LM damping (can be tuned or scheduled)
+
             for iteration in range(max_iter):
 
                 residual_i = 0
                 residuals = np.zeros((n_residuals))
                 jacobian = np.zeros((n_residuals, num_poses * 3 + num_landmarks * 2))
 
-                # Odometry
+                # Odometry constraints
                 for k in range(1, num_poses):
                     # Indices in state vector
                     i = (k - 1) * 3  # pose t - 1 in state
@@ -207,17 +241,19 @@ class MapSlam2D(object):
                     theta_pred = theta_i + odometry['dtheta']
 
                     # residuals
-                    residuals[residual_i] = x_pred - x_j
-                    residuals[residual_i + 1] = y_pred - y_j
-                    residuals[residual_i + 2] = self._wrap_angle(theta_pred - theta_j)
+                    residuals[residual_i] = (x_pred - x_j) * whit_x
+                    residuals[residual_i + 1] = (y_pred - y_j) * whit_y
+                    residuals[residual_i + 2] = self._wrap_angle(theta_pred - theta_j) * whit_theta
 
                     # jacobian
-                    jacobian[residual_i, i] = 1 # d(residual_x)/dx_i
-                    jacobian[residual_i, j] = -1 # d(residual_x)/dx_j
-                    jacobian[residual_i + 1, i + 1] = 1 # d(residual_y)/dy_i
-                    jacobian[residual_i + 1, j + 1] = -1 # d(residual_y)/dy_j
-                    jacobian[residual_i + 2, i + 2] = 1 # d(residual_theta)/dtheta_i
-                    jacobian[residual_i + 2, j + 2] = -1 # d(residual_theta)/dtheta_j
+                    jacobian[residual_i, i] = 1 * whit_x # d(residual_x)/dx_i
+                    jacobian[residual_i, j] = -1 * whit_x # d(residual_x)/dx_j
+
+                    jacobian[residual_i + 1, i + 1] = 1 * whit_y # d(residual_y)/dy_i
+                    jacobian[residual_i + 1, j + 1] = -1 * whit_y # d(residual_y)/dy_j
+
+                    jacobian[residual_i + 2, i + 2] = 1 * whit_theta # d(residual_theta)/dtheta_i
+                    jacobian[residual_i + 2, j + 2] = -1 * whit_theta # d(residual_theta)/dtheta_j
 
                     residual_i += 3
 
@@ -233,6 +269,10 @@ class MapSlam2D(object):
                         # landmark
                         tag_id = observation['landmark_id']
                         l_i = self._get_landmark_index(tag_id)
+                        if l_i < 0:
+                            # Safety: observation refers to unknown landmark id
+                            continue
+
                         # Landmark indices in state vector
                         j = num_poses * 3 + l_i * 2
                         j_x = j
@@ -253,25 +293,23 @@ class MapSlam2D(object):
                             b_pred = self._wrap_angle(np.arctan2(dy, dx) - p_theta)
 
                             # residuals
-                            residuals[residual_i] = r_pred - observation['range']
-                            residuals[residual_i + 1] = self._wrap_angle(b_pred - observation['bearing'])
+                            residuals[residual_i] = (r_pred - observation['range']) * whit_range
+                            residuals[residual_i + 1] = self._wrap_angle(b_pred - observation['bearing']) * whit_bearing
 
                             # jacobian (range) – correct signs and indices
-                            jacobian[residual_i, p_i] = -dx / sqrt_q          # d(res_r)/d(p_x)
-                            jacobian[residual_i, p_i + 1] = -dy / sqrt_q      # d(res_r)/d(p_y)
-                            jacobian[residual_i, j_x] = dx / sqrt_q           # d(res_r)/d(l_x)
-                            jacobian[residual_i, j_y] = dy / sqrt_q           # d(res_r)/d(l_y)
+                            jacobian[residual_i, p_i] = (-dx / sqrt_q) * whit_range          # d(res_r)/d(p_x)
+                            jacobian[residual_i, p_i + 1] = (-dy / sqrt_q) * whit_range      # d(res_r)/d(p_y)
+                            jacobian[residual_i, j_x] = (dx / sqrt_q) * whit_range           # d(res_r)/d(l_x)
+                            jacobian[residual_i, j_y] = (dy / sqrt_q) * whit_range           # d(res_r)/d(l_y)
 
-                            jacobian[residual_i + 1, p_i] = dy / q            # d(res_b)/d(p_x)
-                            jacobian[residual_i + 1, p_i + 1] = -dx / q       # d(res_b)/d(p_y)
-                            jacobian[residual_i + 1, p_i + 2] = -1            # d(res_b)/d(p_theta)
-                            jacobian[residual_i + 1, j_x] = -dy / q           # d(res_b)/d(l_x)
-                            jacobian[residual_i + 1, j_y] = dx / q            # d(res_b)/d(l_y)
-
+                            jacobian[residual_i + 1, p_i] = (dy / q) * whit_bearing            # d(res_b)/d(p_x)
+                            jacobian[residual_i + 1, p_i + 1] = (-dx / q) * whit_bearing       # d(res_b)/d(p_y)
+                            jacobian[residual_i + 1, p_i + 2] = -1 * whit_bearing            # d(res_b)/d(p_theta)
+                            jacobian[residual_i + 1, j_x] = (-dy / q) * whit_bearing           # d(res_b)/d(l_x)
+                            jacobian[residual_i + 1, j_y] = (dx / q) * whit_bearing            # d(res_b)/d(l_y)
                             residual_i += 2
 
 
-                mu = 1e-6  # start small
                 JTJ = jacobian.T @ jacobian
                 JTR = jacobian.T @ residuals
                 JTJ += mu * np.eye(JTJ.shape[0])
@@ -287,6 +325,7 @@ class MapSlam2D(object):
                 # update
                 state += delta
 
+                # wrap angles
                 for k in range(num_poses):
                     state[3*k + 2] = self._wrap_angle(state[3*k + 2])
 
@@ -296,7 +335,7 @@ class MapSlam2D(object):
                     break
                 
             self.last_optimized_state = state
-            self.last_optimized_landmark_ids = list(self.landmark_ids)
+            self.last_optimized_landmark_ids = self.landmark_ids[:num_landmarks]
 
         print("[MapSlam2D] Optimization finished.")
         return state

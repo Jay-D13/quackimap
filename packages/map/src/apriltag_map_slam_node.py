@@ -252,13 +252,6 @@ class AprilTagMapSlamNode(object):
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
     def image_cb(self, msg: CompressedImage):
 
-        # Simple stride-based throttling: only process 1 out of `self.stride` images
-        self.image_counter += 1
-        if self.image_counter < self.stride:
-            return
-        # Reset counter when we actually process a frame
-        self.image_counter = 0
-
         #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY 
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
