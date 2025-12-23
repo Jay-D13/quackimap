@@ -51,8 +51,14 @@ In another tab/terminal, build the VNC image and run it:
 ./launch-vnc.sh vquarck
 ```
 
+# 6 For live SLAM visualization
 
-TODO change sandbox to our map with landmarks
+In another terminal:
+```bash
+dts duckiebot image_viewer vquarck
+```
+
+
 <!-- 
 rostopic list
 rostopic echo /vquarck/slam_pose

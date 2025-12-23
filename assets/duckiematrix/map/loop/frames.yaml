@@ -267,263 +267,90 @@ frames:
       roll: 0.0
       pitch: 0.0
       yaw: 1.5707963267948966
-  map_0/sign_stop_1:
+
+# OUTER
+# Bottom-Left Corner -> Faces South (Down)
+  map_0/sign_out_bl:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 0.66
-      y: 2.51
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57079632679
-  map_0/sign_stop_20:
+    pose: {x: -0.4, y: -0.4, z: 0, roll: 0, pitch: 0, yaw: 4.7123}
+
+  # Bottom Middle -> Faces East (Right)
+  map_0/sign_out_bottom:
     relative_to: ~
     unit: tiles
-    pose:
-      x: -0.55
-      y: 2.62
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.14
-  map_0/sign_stop_21:
+    pose: {x: 2.0, y: -0.5, z: 0, roll: 0, pitch: 0, yaw: 0.0}
+
+  # Bottom-Right Corner -> Faces East (right)
+  map_0/sign_out_br:
     relative_to: ~
     unit: tiles
-    pose:
-      x: -0.67
-      y: 1.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57079632679
-  map_0/sign_right_T_intersect_9:
+    pose: {x: 4.4, y: -0.4, z: 0, roll: 0, pitch: 0, yaw: 0.0}
+
+  # Right Middle -> Faces North (Up)
+  map_0/sign_out_right:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 0.54
-      y: 2.51
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57
-  map_0/sign_left_T_intersect_10:
+    pose: {x: 4.5, y: 2.0, z: 0, roll: 0, pitch: 0, yaw: 1.5707}
+
+  # Top-Right Corner -> Faces North (Up)
+  map_0/sign_out_tr:
     relative_to: ~
     unit: tiles
-    pose:
-      x: -0.55
-      y: 1.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57
-  map_0/sign_stop_22:
+    pose: {x: 4.5, y: 4.5, z: 0, roll: 0, pitch: 0, yaw: 1.5707}
+
+  # Top Middle -> Faces West (Left)
+  map_0/sign_out_top:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 2.5
-      y: 1.46
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_T_intersect_11:
+    pose: {x: 2.0, y: 4.5, z: 0, roll: 0, pitch: 0, yaw: 3.1415}
+
+  # Top-Left Corner -> Faces West (Left)
+  map_0/sign_out_tl:
     relative_to: ~
     unit: tiles
-    pose:
-      x: -0.55
-      y: 2.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.1415
-  map_0/sign_stop_23:
+    pose: {x: -0.5, y: 4.5, z: 0, roll: 0, pitch: 0, yaw: 3.1415}
+
+  # Left Middle -> Faces South (Down)
+  map_0/sign_out_left:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 1.44
-      y: 2.56
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.14
-  map_0/sign_stop_24:
+    pose: {x: -0.5, y: 2.0, z: 0, roll: 0, pitch: 0, yaw: 4.7123}
+
+
+  # INNER
+  # Inner Bottom-Left -> Faces South (Down)
+  map_0/sign_in_bl:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 1.5
-      y: 1.44
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57079632679
-  map_0/sign_right_T_intersect_57:
+    pose: {x: 0.5, y: 1.5, z: 0, roll: 0, pitch: 0, yaw: 4.7123}
+
+  # Inner Bottom -> Faces East (Right)
+  map_0/sign_in_bottom:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 1.44
-      y: 2.68
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.14
-  map_0/sign_left_T_intersect_61:
+    pose: {x: 1.5, y: 0.625, z: 0, roll: 0, pitch: 0, yaw: 0.0}
+
+  # Inner Bottom-Right -> Faces East (Right)
+  map_0/sign_in_br:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 2.5
-      y: 1.34
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_T_intersect_65:
+    pose: {x: 3.4, y: 0.625, z: 0, roll: 0, pitch: 0, yaw: 0.0}
+
+  # Inner Top-Right -> Faces North (Up)
+  map_0/sign_in_tr:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 1.62
-      y: 1.44
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57079632679
-  map_0/sign_stop_25:
+    pose: {x: 3.4, y: 3.4, z: 0, roll: 0, pitch: 0, yaw: 1.5707}
+
+  # Inner Top-Left -> Faces West (Left)
+  map_0/sign_in_tl:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 2.5
-      y: 4.56
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57
-  map_0/sign_stop_26:
+    pose: {x: 0.8, y: 3.4, z: 0, roll: 0, pitch: 0, yaw: 3.1415}
+
+  # Inner Left -> Faces West (Left)
+  map_0/sign_in_left:
     relative_to: ~
     unit: tiles
-    pose:
-      x: 2.56
-      y: 3.44
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_stop_27:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 1.5
-      y: 4.56
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.14
-  map_0/sign_right_T_intersect_58:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 2.56
-      y: 3.32
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_left_T_intersect_62:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 1.5
-      y: 4.68
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 3.14
-  map_0/sign_T_intersect_66:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 2.62
-      y: 4.56
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57079632679
-  map_0/sign_stop_28:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 4.56
-      y: 1.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_stop_29:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 3.44
-      y: 1.44
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57
-  map_0/sign_stop_30:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 4.56
-      y: 2.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57
-  map_0/sign_right_T_intersect_59:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 3.32
-      y: 1.44
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: -1.57
-  map_0/sign_left_T_intersect_64:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 4.68
-      y: 2.5
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 1.57
-  map_0/sign_T_intersect_67:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 4.56
-      y: 1.38
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_stop_40:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 2.5
-      y: 1.46
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  map_0/sign_stop_41:
-    relative_to: ~
-    unit: tiles
-    pose:
-      x: 2.5
-      y: -0.56
-      z: 0.0
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
+    pose: {x: 0.7, y: 2.2, z: 0, roll: 0, pitch: 0, yaw: 3.1415}

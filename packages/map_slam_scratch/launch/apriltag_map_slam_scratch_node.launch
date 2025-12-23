@@ -1,0 +1,28 @@
+<launch>
+  <arg name="pkg_name"  default="map_slam_scratch" doc="name of the package"/>
+  <arg name="node_name" default="apriltag_map_slam_scratch_node" doc="name of the node"/>
+  <arg name="veh" doc="Name of vehicle. ex: vquarck"/>
+
+  <group ns="$(arg veh)">
+    <node pkg="$(arg pkg_name)" type="$(arg node_name).py" name="$(arg node_name)" output="screen" required="true">
+      <param name="veh" value="$(arg veh)" />
+      <param name="image_topic" value="camera_node/image/compressed" />
+      <param name="odom_topic"  value="encoder_pose_node/odom" />
+      <param name="camera_info_topic" value="camera_node/camera_info" />
+      <param name="tag_size" value="0.065" />
+      
+      <!-- SLAM tuning parameters -->
+      <param name="Q_xy" value="0.15" />
+      <param name="Q_theta_deg" value="12.0" />
+      <param name="R_range" value="0.20" />
+      <param name="R_bearing_deg" value="6.0" />
+      <param name="huber_k" value="1.5" />
+      <param name="gate_chi2" value="25.0" />
+      <param name="enable_gating" value="true" />
+      
+      <!-- AprilTag detector settings -->
+      <param name="quad_decimate" value="1.0" />
+      <param name="nthreads" value="2" />
+    </node>
+  </group>
+</launch>
