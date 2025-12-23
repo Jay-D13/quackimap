@@ -21,6 +21,7 @@ class MapSlam2D(object):
         }] # list of dictionaries containing pose and detection information
         self.landmark_ids = [] # list of tag_ids
         self.last_optimized_state = None
+        self.last_optimized_landmark_ids = None
 
     def add_pose(self, v, w, dt, detections):
         """
@@ -85,6 +86,10 @@ class MapSlam2D(object):
                     'bearing': bearing
                 })
 
+                tag_id = detection.tag_id
+                if tag_id not in self.landmark_ids:
+                    self.landmark_ids.append(tag_id)
+
             self.poses.append(pose)
 
             print(f"Added pose {len(self.poses)-1} with {len(detections)} detections.\n\n")
@@ -94,9 +99,26 @@ class MapSlam2D(object):
         # NOTE: only called from update(), which already holds the lock.
         num_poses = len(self.poses)
         num_landmarks = len(self.landmark_ids)
+        state_dim = 3 * num_poses + 2 * num_landmarks
 
-        # Initialize state
+        # Initialize state vector
         state = np.zeros(3 * num_poses + 2 * num_landmarks)
+
+        #Start off from last optimized state if available
+        prev = None
+        if self.last_optimized_state is not None:
+            prev = np.asarray(self.last_optimized_state).ravel()
+            # Copy as much as fits (prefix copy). This reuses old poses/landmarks that still exist.
+            ncopy = min(prev.size, state_dim)
+            if ncopy > 0:
+                state[:ncopy] = prev[:ncopy]
+
+            # If dimensions match exactly, we can just return a clean copy
+            if prev.size == state_dim:
+                # Wrap all pose angles and return
+                for k in range(num_poses):
+                    state[3*k + 2] = self._wrap_angle(state[3*k + 2])
+                return state
 
         # Initial state
         state[0] = self.poses[0]['x']
@@ -110,7 +132,7 @@ class MapSlam2D(object):
             # Update pose in state
             state[i * 3] = state[(i - 1) * 3] + odometry['dx']
             state[i * 3 + 1] = state[(i - 1) * 3 + 1] + odometry['dy']
-            state[i * 3 + 2] = state[(i - 1) * 3 + 2] + odometry['dtheta']
+            state[i * 3 + 2] = self._wrap_angle(state[(i - 1) * 3 + 2] + odometry['dtheta'])
 
         # Landmark states
         for i, pose in enumerate(self.poses):
@@ -127,12 +149,6 @@ class MapSlam2D(object):
                 x_absolute = x + observation['range'] * np.cos(observation['bearing'] + theta)
                 y_absolute = y + observation['range'] * np.sin(observation['bearing'] + theta)
 
-                # Initialize new landmark
-                if lm_index == -1:
-                    self.landmark_ids.append(tag_id)
-                    lm_index = len(self.landmark_ids) - 1
-                    state = np.concatenate((state, np.zeros(2)), axis=0)
-
                 # Update state with latest landmark value
                 state[num_poses * 3 + lm_index * 2] = x_absolute
                 state[num_poses * 3 + lm_index * 2 + 1] = y_absolute
@@ -141,6 +157,7 @@ class MapSlam2D(object):
 
     def update(self, max_iter=50):
         """Maximum a posteriori optimization using Gauss-Newton update"""
+        print("[MapSlam2D] Optimization started.")
         with self._lock:
             num_poses = len(self.poses)
             num_landmarks = len(self.landmark_ids)
@@ -152,11 +169,14 @@ class MapSlam2D(object):
             # Recompute num_landmarks after get_state, to match the actual state size
             num_landmarks = len(self.landmark_ids)
 
+            # Prior for first pose
+            x0_prior = state[0:3].copy()
+            lambda_prior = 1e4
+
+            # number of residuals to calculate
+            n_residuals = (num_poses - 1) * 3 + sum(len(p['observations']) for p in self.poses) * 2
+
             for iteration in range(max_iter):
-                # number of residuals to calculate
-                n_residuals = (num_poses - 1) * 3
-                for pose in self.poses:
-                    n_residuals += len(pose['observations']) * 2
 
                 residual_i = 0
                 residuals = np.zeros((n_residuals))
@@ -189,7 +209,7 @@ class MapSlam2D(object):
                     # residuals
                     residuals[residual_i] = x_pred - x_j
                     residuals[residual_i + 1] = y_pred - y_j
-                    residuals[residual_i + 2] = theta_pred - theta_j
+                    residuals[residual_i + 2] = self._wrap_angle(theta_pred - theta_j)
 
                     # jacobian
                     jacobian[residual_i, i] = 1 # d(residual_x)/dx_i
@@ -234,29 +254,14 @@ class MapSlam2D(object):
 
                             # residuals
                             residuals[residual_i] = r_pred - observation['range']
-                            residuals[residual_i + 1] = b_pred - observation['bearing']
-                            """
-                            # jacobian (range)
-                            jacobian[residual_i, p_i] = dx / sqrt_q # d(residual_range)/d(p_x)
-                            jacobian[residual_i, p_i + 1] = dy / sqrt_q # d(residual_range)/d(p_y)
-                            jacobian[residual_i, l_i] = -dx / sqrt_q # d(residual_range)/d(l_x)
-                            jacobian[residual_i, l_i + 1] = -dy / sqrt_q # d(residual_range)/d(l_y)
-                            """
-                            # FIX???? TO VERIFY:
+                            residuals[residual_i + 1] = self._wrap_angle(b_pred - observation['bearing'])
+
                             # jacobian (range) – correct signs and indices
                             jacobian[residual_i, p_i] = -dx / sqrt_q          # d(res_r)/d(p_x)
                             jacobian[residual_i, p_i + 1] = -dy / sqrt_q      # d(res_r)/d(p_y)
                             jacobian[residual_i, j_x] = dx / sqrt_q           # d(res_r)/d(l_x)
                             jacobian[residual_i, j_y] = dy / sqrt_q           # d(res_r)/d(l_y)
-                            """ 
-                            # jacobian (bearing)
-                            jacobian[residual_i + 1, p_i] = dy / q # d(residual_bearing)/d(p_x)
-                            jacobian[residual_i + 1, p_i + 1] = -dx / q # d(residual_bearing)/d(p_y)
-                            jacobian[residual_i + 1, p_i + 2] = -1 # d(residual_bearing)/d(p_theta)
-                            jacobian[residual_i + 1, l_i] = -dy / q # d(residual_bearing)/d(l_x)
-                            jacobian[residual_i + 1, l_i + 1] = dx / q # d(residual_bearing)/d(l_y)
-                            """
-                            # FIX???? TO VERIFY:    
+
                             jacobian[residual_i + 1, p_i] = dy / q            # d(res_b)/d(p_x)
                             jacobian[residual_i + 1, p_i + 1] = -dx / q       # d(res_b)/d(p_y)
                             jacobian[residual_i + 1, p_i + 2] = -1            # d(res_b)/d(p_theta)
@@ -264,27 +269,36 @@ class MapSlam2D(object):
                             jacobian[residual_i + 1, j_y] = dx / q            # d(res_b)/d(l_y)
 
                             residual_i += 2
-            
+
+
+                mu = 1e-6  # start small
                 JTJ = jacobian.T @ jacobian
                 JTR = jacobian.T @ residuals
+                JTJ += mu * np.eye(JTJ.shape[0])
 
-                # fix first pose
-                JTJ[0, 0] += 10000
-                JTJ[1, 1] += 10000
-                JTJ[2, 2] += 10000
-                JTR[0:3] = 0
+                #First pose:
+                JTJ[0:3, 0:3] += lambda_prior * np.eye(3)
+                JTR[0:3] += lambda_prior * (state[0:3] - x0_prior)
+
 
                 # solver : JTJ * delta = JTR
-                delta = np.linalg.solve(JTJ, JTR)
+                delta = np.linalg.solve(JTJ, -JTR)
 
                 # update
                 state += delta
 
-                # convergence check
-                if np.linalg.norm(delta) < 1e-6:
-                    break
+                for k in range(num_poses):
+                    state[3*k + 2] = self._wrap_angle(state[3*k + 2])
 
-            self.last_optimized_state = state   
+                # convergence check
+                if np.linalg.norm(delta) < 1e-4:
+                    print(f"[MapSlam2D] Converged at iteration {iteration}.")   
+                    break
+                
+            self.last_optimized_state = state
+            self.last_optimized_landmark_ids = list(self.landmark_ids)
+
+        print("[MapSlam2D] Optimization finished.")
         return state
 
     def _get_landmark_index(self, tag_id):

@@ -10,6 +10,7 @@ from sensor_msgs.msg import Image, CompressedImage, CameraInfo
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, Point, PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker, MarkerArray
+from std_srvs.srv import Trigger, TriggerResponse
 
 from dt_apriltags import Detector
 from map.include.map_slam import MapSlam2D
@@ -38,7 +39,7 @@ class AprilTagMapSlamNode(object):
         # Backend SLAM filter
         self.slam = MapSlam2D()
         # Throttle image processing: use only 1 out of N images
-        self.stride = rospy.get_param("~image_stride", 3)
+        self.stride = rospy.get_param("~image_stride", 5)
         self.image_counter = 0
 
         self.last_odom_time = None
@@ -103,7 +104,9 @@ class AprilTagMapSlamNode(object):
         # Odometry publisher for SLAM estimate (for RVIZ Axes visualization)
         self.slam_odom_pub = rospy.Publisher("slam_odom", Odometry, queue_size=10)
 
-        rospy.Timer(rospy.Duration(5.0), self.run_optimization)
+        # Optimization service (Trigger)
+        self.optimize_srv = rospy.Service("~optimize", Trigger, self.cb_optimize)
+        self.iters = int(rospy.get_param("~batch_iters", 100))
 
         """         
         # Odometry publisher for ground truth (for RVIZ Axes visualization)
@@ -277,8 +280,8 @@ class AprilTagMapSlamNode(object):
             tag_size=self.tag_size,
         )
         
-        if len(detections) == 0:
-            return
+        #if len(detections) == 0:
+            #return
 
 
         # We need accumulated odometry to integrate between keyframe poses
@@ -304,7 +307,7 @@ class AprilTagMapSlamNode(object):
 
             self.last_pose_time = self.last_odom_time
             self.last_detection_time = rospy.Time.now()
-
+            
         # Logging for each detection (range/bearing in robot frame)
         for det in detections:
                          
@@ -339,28 +342,19 @@ class AprilTagMapSlamNode(object):
         # Update all visualization using the incremental pose estimate in self.slam.x
         self.publish_all()
 
-    def run_optimization(self, event=None):
-        """
-        Periodically run batch optimization in MapSlam2D and publish the
-        optimized trajectory as a Path message.
-        all_states layout:
-          [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T
-        """
+    def cb_optimize(self, req):
+        """Service callback to trigger batch optimization."""
         # Need at least one pose to optimize
         if not self.slam.poses:
-            return
+            return TriggerResponse(success=False, message="No poses to optimize.")
 
-        all_states = self.slam.update()  # 1D state vector as described above
-
-
+        all_states = self.slam.update(max_iter=self.iters)
         if all_states is None:
-            return
+            return TriggerResponse(success=False, message="Optimization failed.")
 
-        # After optimization, MapSlam2D.update() has stored
-        # the full optimized state in self.slam.last_optimized_state.
-        # Publish path and landmarks from that optimized state.
         self.publish_path()
         self.publish_landmarks()
+        return TriggerResponse(success=True, message=f"Optimized with {self.iters} iters.")
 
     def draw_detections(self, img, detections):
         """Draw AprilTag detections on image for debugging."""
@@ -535,7 +529,7 @@ class AprilTagMapSlamNode(object):
 
         all_states = np.asarray(self.slam.last_optimized_state).ravel()
         num_poses = len(self.slam.poses)
-        num_landmarks = len(self.slam.landmark_ids)
+        num_landmarks = len(self.slam.last_optimized_landmark_ids)
 
         expected_len = 3 * num_poses + 2 * num_landmarks
         if all_states.size < expected_len:
@@ -564,7 +558,7 @@ class AprilTagMapSlamNode(object):
         points_marker.lifetime = rospy.Duration(0)
 
         # Text markers for landmark IDs from optimized state
-        for i, tag_id in enumerate(self.slam.landmark_ids):
+        for i, tag_id in enumerate(self.slam.last_optimized_landmark_ids):
             lm_base = 3 * num_poses + 2 * i
             if lm_base + 1 >= all_states.size:
                 break
