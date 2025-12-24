@@ -158,7 +158,7 @@ class EkfSlam2D:
         ])
         self.last_z_hat = z_hat.copy()
 
-         Measurement Jacobian
+        # Measurement Jacobian
         n = self.x.shape[0]
         H = np.zeros((2, n))
         
