@@ -622,7 +622,7 @@ The EKF-SLAM implementation served as our foundational milestone. It successfull
 
 #### Duckiematrix
 
-Video and images here
+https://github.com/user-attachments/assets/44c9d52e-68f2-4bcc-a411-f018f22aaf90
 
 #### Real Duckiebot
 
