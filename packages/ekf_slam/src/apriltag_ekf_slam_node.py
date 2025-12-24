@@ -29,6 +29,17 @@ class AprilTagEkfSlamNode(object):
         self.map_name = rospy.get_param("~map_name", "loop")
         self.veh_name = rospy.get_param("~veh_name", "vehicle_0")
         self.wait_for_gt = rospy.get_param("~wait_for_gt", True)
+        
+        self.use_manual_intrinsics = rospy.get_param("~use_manual_intrinsics", True)
+        self.manual_fx = rospy.get_param("~camera_fx", 295.796)
+        self.manual_fy = rospy.get_param("~camera_fy", 299.539)
+        self.manual_cx = rospy.get_param("~camera_cx", 321.262)
+        self.manual_cy = rospy.get_param("~camera_cy", 241.736)
+        
+        if self.use_manual_intrinsics:
+            self.camera_params = [self.manual_fx, self.manual_fy, self.manual_cx, self.manual_cy]
+        else:
+            self.camera_params = None
 
         self.camera_params = None
         self.slam = EkfSlam2D()
@@ -93,20 +104,15 @@ class AprilTagEkfSlamNode(object):
             rospy.logwarn(f"SLAM: Listening on /{self.veh_name}/gt_pose")
             rospy.logwarn("SLAM: You can disable this wait by setting ~wait_for_gt to False.")
 
-    def camera_info_cb(self, msg: CameraInfo):
-        # K is row-major: [fx, 0, cx, 0, fy, cy, 0, 0, 1]
+    def _camera_info_cb(self, msg: CameraInfo):
+        if self.camera_params is not None:
+            return
         K = msg.K
-        fx = K[0]
-        fy = K[4]
-        cx = K[2]
-        cy = K[5]
-        self.camera_params = [fx, fy, cx, cy]
-
-        rospy.loginfo(f"Got camera intrinsics fx={fx:.2f}, fy={fy:.2f}, cx={cx:.2f}, cy={cy:.2f}")
-        self.camera_info_sub.unregister()
+        self.camera_params = [K[0], K[4], K[2], K[5]]
+        rospy.logwarn(f"Camera intrinsics from topic: fx={K[0]:.2f}, fy={K[4]:.2f}, cx={K[2]:.2f}, cy={K[5]:.2f}")
 
     # ---------- GROUND TRUTH CALLBACK ----------
-    def gt_pose_cb(self, msg: Odometry):
+    def _gt_pose_cb(self, msg: Odometry):
         """
         Handle ground truth pose.
         Updates the visualizer's GT path.
@@ -147,7 +153,7 @@ class AprilTagEkfSlamNode(object):
         self.gt_path.header.stamp = current_time
         self.gt_path_pub.publish(self.gt_path)
 
-    def odom_cb(self, msg: Odometry):
+    def _odom_cb(self, msg: Odometry):
         """Odometry callback for EKF prediction step."""
         if not self.slam_initialized:
             return
@@ -177,9 +183,9 @@ class AprilTagEkfSlamNode(object):
             rospy.loginfo(f"SLAM State: x={self.slam.x[0,0]:.3f}, y={self.slam.x[1,0]:.3f}, theta={np.rad2deg(self.slam.x[2,0]):.1f}deg")
 
         self.slam.predict(v, w, dt)
-        self.publish_fast_state()
+        self._publish_state()
 
-    def image_cb(self, msg: CompressedImage):
+    def _image_cb(self, msg: CompressedImage):
         """Image callback for AprilTag detection and EKF update."""
         if not self.slam_initialized:
             return
@@ -208,7 +214,7 @@ class AprilTagEkfSlamNode(object):
         self.draw_detections(debug_img, detections)
         
         # Publish debug image
-        self.publish_debug_image(debug_img, msg.header.stamp)
+        self._publish_debug_image(debug_img, msg.header.stamp)
 
         if len(detections) == 0:
             return
@@ -250,7 +256,7 @@ class AprilTagEkfSlamNode(object):
             rospy.loginfo_throttle(1.0, 
                 f"Tag {tag_id} detected: range={r:.2f}m, bearing={np.rad2deg(bearing):.1f}deg")
 
-        self.publish_fast_state()
+        self._publish_state()
 
     def draw_detections(self, img, detections):
         """Draw AprilTag detections on image for debugging."""
