@@ -360,7 +360,7 @@ Our custom Maximum A Posteriori (MAP) formulation treats SLAM as a nonlinear lea
 
 #### Problem Formulation
 
-![graph](https://hackmd.io/_uploads/S1qf8rdmbl.png)
+<img width="1004" height="827" alt="graph" src="https://github.com/user-attachments/assets/66bbad7a-0b4d-4815-bf3a-0f9a86bc3dbb" />
 
 In maximum-a-posteriori (MAP) SLAM, we are trying to solve the following problem:
 
@@ -649,7 +649,7 @@ The EKF-SLAM implementation served as our foundational milestone. It successfull
 
 #### Duckiematrix
 
-Video and images here
+https://github.com/user-attachments/assets/cabd0e7e-1441-432c-b833-d0f67a4041ca
 
 #### Real Duckiebot
 
@@ -677,7 +677,7 @@ The GTSAM implementation achieved our goal of on real robot performance with rob
 
 #### Duckiematrix
 
-Video and images here
+https://github.com/user-attachments/assets/178326a2-ecdb-4132-a80f-b099886fb60e
 
 #### Real Duckiebot
 
