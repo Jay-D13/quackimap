@@ -1,1 +1,1 @@
-from .map_slam_backend import MapSlam2D
+from .gtsam_slam_backend import MapSlam2D
