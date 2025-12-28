@@ -322,7 +322,7 @@ where:
 - $G_z = \frac{\partial l}{\partial (r, \beta)}$ — Jacobian w.r.t. measurement
 - $\sigma_{\text{init}}^2 = 0.25$ — Additional initial uncertainty
 
-#### Mahalanobis Gating
+<!-- #### Mahalanobis Gating
 
 To reject outlier measurements, we compute the Mahalanobis distance:
 
@@ -332,7 +332,7 @@ where $S = H \bar{\Sigma} H^T + R$ is the innovation covariance. Measurements wi
 
 | Parameter | Value | Description |
 | --- | --- | --- |
-| `mahal_gate` | 75  | Chi-squared threshold (very permissive for robustness) |
+| `mahal_gate` | 75  | Chi-squared threshold (very permissive for robustness) | -->
 
 #### Noise Parameters
 
@@ -649,7 +649,13 @@ The EKF-SLAM implementation served as our foundational milestone. It successfull
 
 #### Duckiematrix
 
+**Rviz visualization:**
+
 https://github.com/user-attachments/assets/cabd0e7e-1441-432c-b833-d0f67a4041ca
+
+**Image viewer**
+
+https://github.com/Jay-D13/quackimap/blob/v3/docs/media/ekf_x8.mp4
 
 #### Real Duckiebot
 
