@@ -1,102 +1,21 @@
 version: 1.0
 traffic_signs:
-  map_0/sign_stop_1:
-    id: 1
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_20:
-    id: 20
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_21:
-    id: 21
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_23:
-    id: 23
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_24:
-    id: 24
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_25:
-    id: 25
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_26:
-    id: 26
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_27:
-    id: 27
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_28:
-    id: 28
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_29:
-    id: 29
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_30:
-    id: 30
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_40:
-    id: 40
-    type: sign_stop
-    family: 36h11
-  map_0/sign_stop_41:
-    id: 41
-    type: sign_stop
-    family: 36h11
-  map_0/sign_right_T_intersect_9:
-    id: 9
-    type: sign_right_T_intersect
-    family: 36h11
-  map_0/sign_right_T_intersect_57:
-    id: 57
-    type: sign_right_T_intersect
-    family: 36h11
-  map_0/sign_right_T_intersect_58:
-    id: 58
-    type: sign_right_T_intersect
-    family: 36h11
-  map_0/sign_right_T_intersect_59:
-    id: 59
-    type: sign_right_T_intersect
-    family: 36h11
-  map_0/sign_left_T_intersect_10:
-    id: 10
-    type: sign_left_T_intersect
-    family: 36h11
-  map_0/sign_left_T_intersect_61:
-    id: 61
-    type: sign_left_T_intersect
-    family: 36h11
-  map_0/sign_left_T_intersect_62:
-    id: 62
-    type: sign_left_T_intersect
-    family: 36h11
-  map_0/sign_left_T_intersect_64:
-    id: 64
-    type: sign_left_T_intersect
-    family: 36h11
-  map_0/sign_T_intersect_11:
-    id: 11
-    type: sign_T_intersect
-    family: 36h11
-  map_0/sign_T_intersect_65:
-    id: 65
-    type: sign_T_intersect
-    family: 36h11
-  map_0/sign_T_intersect_66:
-    id: 66
-    type: sign_T_intersect
-    family: 36h11
-  map_0/sign_T_intersect_67:
-    id: 67
-    type: sign_T_intersect
-    family: 36h11
+  # --- OUTER ---
+  map_0/sign_out_bl:      {id: 1, type: sign_stop, family: 36h11}
+  map_0/sign_out_bottom:  {id: 2, type: sign_stop, family: 36h11}
+  map_0/sign_out_br:      {id: 3, type: sign_stop, family: 36h11}
+  map_0/sign_out_right:   {id: 4, type: sign_stop, family: 36h11}
+  map_0/sign_out_tr:      {id: 5, type: sign_stop, family: 36h11}
+  map_0/sign_out_top:     {id: 6, type: sign_stop, family: 36h11}
+  map_0/sign_out_tl:      {id: 7, type: sign_stop, family: 36h11}
+  map_0/sign_out_left:    {id: 8, type: sign_stop, family: 36h11}
+
+  # --- INNER ---
+  map_0/sign_in_bl:       {id: 9,  type: sign_stop, family: 36h11}
+  map_0/sign_in_bottom:   {id: 10, type: sign_stop, family: 36h11}
+  map_0/sign_in_br:       {id: 11, type: sign_stop, family: 36h11}
+  # map_0/sign_in_right:    {id: 12, type: sign_stop, family: 36h11}
+  map_0/sign_in_tr:       {id: 13, type: sign_stop, family: 36h11}
+  # map_0/sign_in_top:      {id: 14, type: sign_stop, family: 36h11}
+  map_0/sign_in_tl:       {id: 15, type: sign_stop, family: 36h11}
+  # map_0/sign_in_left:     {id: 16, type: sign_stop, family: 36h11}

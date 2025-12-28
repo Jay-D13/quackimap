@@ -1,0 +1,1 @@
+from .gtsam_slam_backend import MapSlam2D

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(slam)
+project(ekf_slam)
 
 find_package(catkin REQUIRED COMPONENTS
   duckietown_msgs

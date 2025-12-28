@@ -66,17 +66,17 @@ Run SLAM launcher against your robot. Use the name of your physical or virtual r
 ```bash
 dts devel run -R <ROBOT-NAME>
 ```
-By default, the command uses the launcher located at launchers/default.sh but you can specify another one with the -L argument as such:
-
-***TODO a launch file per SLAM implementation instead of just uncommenting on the default***
+By default, the command uses the launcher located at `launchers/default.sh`, which is going to use GTSAM-SLAM, but you can specify another one with the -L argument as such:
 
 ```bash
-dts devel run -R <ROBOT-NAME> -L <your-launcher-name>
+dts devel run -R <ROBOT-NAME> -L <launcher-name (no .sh)>
 ```
 
 **Available launchers:**
 
-- `default.sh` — 
+- `ekf` : Launch EKF-SLAM implementation
+- `map` : Launch MAP-SLAM implementation
+- `gtsam` : Launch GTSAM-SLAM implementation
 
 ### 5. VNC
 
@@ -218,6 +218,7 @@ $$d_x^{\text{robot}} = c_z, \quad d_y^{\text{robot}} = -c_x$$
 
 Then compute range and bearing:
 $$r = \sqrt{d_x^2 + d_y^2}, \quad \beta = \text{atan2}(d_y, d_x)$$
+
 ---
 
 ### 3.3 EKF SLAM
@@ -264,6 +265,16 @@ where $G_t$ is the full Jacobian (identity except for the robot block $F_t$), an
 $$Q_t^{\text{full}} = \begin{bmatrix} Q \cdot \Delta t & 0 \\ 0 & 0 \end{bmatrix}$$
 
 We scale process noise by $\Delta t$ to account for variable time steps.
+
+#### Motion Model Jacobian
+
+The Jacobian $G_t$ is identity except for the robot pose block $F_t = \frac{\partial f}{\partial x}$:
+
+**Straight-line case** ($|\omega| < 10^{-6}$):
+$$F_t = \begin{bmatrix} 1 & 0 & -v \Delta t \sin(\theta_t) \\ 0 & 1 & v \Delta t \cos(\theta_t) \\ 0 & 0 & 1 \end{bmatrix}$$
+
+**Arc motion case** ($|\omega| \geq 10^{-6}$):
+$$F_t = \begin{bmatrix} 1 & 0 & \frac{v}{\omega}\left(\cos(\theta_t + \omega \Delta t) - \cos(\theta_t)\right) \\ 0 & 1 & \frac{v}{\omega}\left(\sin(\theta_t + \omega \Delta t) - \sin(\theta_t)\right) \\ 0 & 0 & 1 \end{bmatrix}$$
  
 #### Update Step:
 
@@ -278,6 +289,17 @@ $$
 $$
 
 **Residual**: $y = z - h(\bar{\mu}_t)$ with angle wrapping on the bearing component
+
+#### Measurement Jacobian
+
+The Jacobian $H$ relates measurement residuals to state changes. Let $\delta_x = l_j^x - x_t$, $\delta_y = l_j^y - y_t$, and $q = \delta_x^2 + \delta_y^2$:
+
+$$H = \begin{bmatrix} 
+-\frac{\delta_x}{\sqrt{q}} & -\frac{\delta_y}{\sqrt{q}} & 0 & \cdots & \frac{\delta_x}{\sqrt{q}} & \frac{\delta_y}{\sqrt{q}} & \cdots \\
+\frac{\delta_y}{q} & -\frac{\delta_x}{q} & -1 & \cdots & -\frac{\delta_y}{q} & \frac{\delta_x}{q} & \cdots
+\end{bmatrix}$$
+
+The non-zero columns correspond to the robot pose $(x, y, \theta)$ and the observed landmark $(l_j^x, l_j^y)$.
 
 #### Landmark Initialization
 
@@ -295,7 +317,7 @@ where:
 - $G_z = \frac{\partial l}{\partial (r, \beta)}$ — Jacobian w.r.t. measurement
 - $\sigma_{\text{init}}^2 = 0.25$ — Additional initial uncertainty
 
-#### Mahalanobis Gating
+<!-- #### Mahalanobis Gating
 
 To reject outlier measurements, we compute the Mahalanobis distance:
 
@@ -305,7 +327,7 @@ where $S = H \bar{\Sigma} H^T + R$ is the innovation covariance. Measurements wi
 
 | Parameter | Value | Description |
 | --- | --- | --- |
-| `mahal_gate` | 75  | Chi-squared threshold (very permissive for robustness) |
+| `mahal_gate` | 75  | Chi-squared threshold (very permissive for robustness) | -->
 
 #### Noise Parameters
 
@@ -333,7 +355,7 @@ Our custom Maximum A Posteriori (MAP) formulation treats SLAM as a nonlinear lea
 
 #### Problem Formulation
 
-![graph](/images/graph.png)
+<img width="1004" height="827" alt="graph" src="https://github.com/user-attachments/assets/66bbad7a-0b4d-4815-bf3a-0f9a86bc3dbb" />
 
 In maximum-a-posteriori (MAP) SLAM, we are trying to solve the following problem:
 
@@ -622,7 +644,13 @@ The EKF-SLAM implementation served as our foundational milestone. It successfull
 
 #### Duckiematrix
 
-https://github.com/user-attachments/assets/44c9d52e-68f2-4bcc-a411-f018f22aaf90
+**Rviz visualization:**
+
+https://github.com/user-attachments/assets/cabd0e7e-1441-432c-b833-d0f67a4041ca
+
+**Image viewer**
+
+https://github.com/Jay-D13/quackimap/blob/v3/docs/media/ekf_x8.mp4
 
 #### Real Duckiebot
 
@@ -650,7 +678,7 @@ The GTSAM implementation achieved our goal of on real robot performance with rob
 
 #### Duckiematrix
 
-Video and images here
+https://github.com/user-attachments/assets/178326a2-ecdb-4132-a80f-b099886fb60e
 
 #### Real Duckiebot
 

@@ -1,6 +1,6 @@
 <launch>
-  <arg name="pkg_name"  default="slam" doc="name of the package"/>
-  <arg name="node_name" default="apriltag_ekf_slam_node" doc="name of the node"/>
+  <arg name="pkg_name"  default="gtsam_slam" doc="name of the package"/>
+  <arg name="node_name" default="apriltag_gtsam_slam_node" doc="name of the node"/>
   <arg name="veh" doc="Name of vehicle. ex: megaman"/>
 
   <group ns="$(arg veh)">
