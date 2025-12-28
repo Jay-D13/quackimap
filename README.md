@@ -1,8 +1,3 @@
----
-title: 'Quackimap: A Duckietown SLAM framework for mapping using AprilTags'
-
----
-
 # Quackimap: A Duckietown SLAM framework for mapping using AprilTags 
 
 This is the official repository for Quackimap - a project for the Autonomous Vehicles (Duckietown) Course in Fall 2025 at University of Montreal.
