@@ -17,6 +17,7 @@ class EkfSlam2D:
 
         # Mahalanobis gate
         self.mahal_gate = 75
+        self.use_mahal_gate = False # leave on False, doesn't work very well in simulation
         
         # Initial landmark uncertainty
         # Not too high (causes huge ellipses) but not too low (overconfident)
@@ -211,8 +212,8 @@ class EkfSlam2D:
 
     def _initialize_landmark(self, tag_id, z):
         """Initialize a new landmark."""
-        r = float(z[0, 0])
-        b = float(z[1, 0])
+        r = float(z[0])
+        b = float(z[1])
         rx, ry, rtheta = float(self.x[0, 0]), float(self.x[1, 0]), float(self.x[2, 0])
 
         # Landmark position in world frame

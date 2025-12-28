@@ -71,17 +71,17 @@ Run SLAM launcher against your robot. Use the name of your physical or virtual r
 ```bash
 dts devel run -R <ROBOT-NAME>
 ```
-By default, the command uses the launcher located at launchers/default.sh but you can specify another one with the -L argument as such:
-
-***TODO a launch file per SLAM implementation instead of just uncommenting on the default***
+By default, the command uses the launcher located at `launchers/default.sh`, which is going to use GTSAM-SLAM, but you can specify another one with the -L argument as such:
 
 ```bash
-dts devel run -R <ROBOT-NAME> -L <your-launcher-name>
+dts devel run -R <ROBOT-NAME> -L <launcher-name (no .sh)>
 ```
 
 **Available launchers:**
 
-- `default.sh` — 
+- `ekf` : Launch EKF-SLAM implementation
+- `map` : Launch MAP-SLAM implementation
+- `gtsam` : Launch GTSAM-SLAM implementation
 
 ### 5. VNC
 

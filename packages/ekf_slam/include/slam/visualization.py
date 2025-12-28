@@ -4,6 +4,7 @@ matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle, Polygon
+from matplotlib.lines import Line2D
 from matplotlib.collections import LineCollection
 import matplotlib.patheffects as pe
 import numpy as np
@@ -399,10 +400,35 @@ class SlamVisualizer:
                      fontsize=9, fontfamily='monospace', verticalalignment='top',
                      color=self.COLORS['text_primary'], bbox=props, zorder=100)
 
-        legend = "  ".join([f"━━ SLAM Path", f"━━ GT Path", f"● SLAM Tags", f"● GT Tags"])
-        self.ax.text(0.5, 0.02, legend, transform=self.ax.transAxes, fontsize=9,
-                     ha='center', va='bottom', color=self.COLORS['text_secondary'],
-                     path_effects=[pe.withStroke(linewidth=3, foreground=self.COLORS['bg_dark'])], zorder=100)
+        # legend = "  ".join([f"━━ SLAM Path", f"━━ GT Path", f"● SLAM Tags", f"● GT Tags"])
+        # self.ax.text(0.5, 0.02, legend, transform=self.ax.transAxes, fontsize=9,
+        #              ha='center', va='bottom', color=self.COLORS['text_secondary'],
+        #              path_effects=[pe.withStroke(linewidth=3, foreground=self.COLORS['bg_dark'])], zorder=100)
+        handles = [
+            Line2D([0], [0], color=self.COLORS['slam_path'], lw=2.5, label='SLAM Path'),
+            Line2D([0], [0], color=self.COLORS['gt_path'], lw=2.0, label='GT Path'),
+            Line2D([0], [0], marker='o', linestyle='None',
+                   markerfacecolor=self.COLORS['slam_landmark'],
+                   markeredgecolor='white', markersize=7, label='SLAM Tags'),
+            Line2D([0], [0], marker='o', linestyle='None',
+                   markerfacecolor=self.COLORS['gt_landmark'],
+                   markeredgecolor='white', markersize=7, label='GT Tags'),
+        ]
+
+        leg = self.ax.legend(
+            handles=handles,
+            loc='lower center',
+            bbox_to_anchor=(0.5, 0.01),   # inside the axes, near bottom
+            ncol=4,
+            frameon=False,
+            fontsize=9,
+            labelcolor=self.COLORS['text_secondary'],
+            handlelength=2.0,
+            handletextpad=0.6,
+            columnspacing=1.2,
+            borderaxespad=0.0,
+        )
+
 
     def _configure_axes(self):
         all_x = self.slam_path_x + self.gt_path_x + [p[0] for p in self.gt_landmarks.values()]
