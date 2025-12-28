@@ -305,6 +305,9 @@ class SlamVisualizer:
         lane_kwargs = dict(color='#d29922', linestyle='--', linewidth=1.5, dashes=(4, 4), alpha=0.5, zorder=1)
 
         for tx, ty, yaw, t_type in self.map_tiles:
+            if t_type == 'floor':
+                continue
+
             c, s = np.cos(yaw), np.sin(yaw)
             R = np.array([[c, -s], [s, c]])
 
@@ -312,12 +315,13 @@ class SlamVisualizer:
                 return R @ np.asarray(p, dtype=float) + np.array([tx, ty])
 
             corners = (R @ base_corners.T).T + np.array([tx, ty])
-            self.ax.add_patch(Polygon(corners, closed=True, facecolor='#21262d',
-                                       edgecolor='#30363d', linewidth=1, alpha=0.6, zorder=0))
+            self.ax.add_patch(Polygon(
+                corners, closed=True,
+                facecolor='#21262d', edgecolor='#30363d',
+                linewidth=1, alpha=0.6, zorder=0
+            ))
 
-            if t_type == 'floor':
-                continue
-            elif t_type == 'straight':
+            if t_type == 'straight':
                 p1, p2 = tf([0, -half]), tf([0, half])
                 self.ax.plot([p1[0], p2[0]], [p1[1], p2[1]], **lane_kwargs)
             elif t_type == 'curve':
