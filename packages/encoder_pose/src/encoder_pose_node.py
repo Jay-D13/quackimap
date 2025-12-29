@@ -156,10 +156,10 @@ class EncoderPoseNode(DTROS):
                     self.delta_phi_left,
                     self.delta_phi_right,
                 )
-
+                """ 
                 if (x_curr == self.x_prev) and (y_curr == self.y_prev) and (theta_curr == self.theta_prev):
                     return
-
+                """
                 theta_curr = self.angle_clamp(theta_curr)  # angle always between 0,2pi
 
                 # Calculate dt and velocities
