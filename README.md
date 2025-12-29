@@ -78,6 +78,22 @@ dts devel run -R <ROBOT-NAME> -L <launcher-name (no .sh)>
 - `map` : Launch MAP-SLAM implementation
 - `gtsam` : Launch GTSAM-SLAM implementation
 
+### Batch Optimization Note (MAP-SLAM from scratch)
+
+As described later in this README, our **MAP-SLAM implementation (from scratch)** performs **batch optimization only** (not incremental / continuous optimization).
+That means the intended workflow is:
+
+1. Drive/roll the Duckiebot around to collect poses + AprilTag observations
+2. When you’re ready, trigger one optimization pass manually with:
+
+```bash
+rosservice call /<ROBOT_NAME>/apriltag_map_slam_node/optimize
+```
+
+A demo of this workflow is available in the **Results → MAP-SLAM** subsection.
+
+**Practical tip:** optimization time grows with the number of stored poses. As a reference, it takes **~10 seconds for ~100 poses**, so try to keep the trajectory window relatively small for faster iterations.
+
 ### 5. VNC
 
 In another tab/terminal, build the VNC image and run it:
