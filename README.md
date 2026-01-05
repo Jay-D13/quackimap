@@ -670,7 +670,7 @@ https://github.com/Jay-D13/quackimap/blob/v3/docs/media/ekf_x8.mp4
 
 #### Real Duckiebot
 
-Video and images here
+[Screencast from 2026-01-05 15-17-31.webm](https://github.com/user-attachments/assets/546ebd8f-3365-470b-8f44-6b5609afff7f)
 
 ### MAP-SLAM (From Scratch)
 
