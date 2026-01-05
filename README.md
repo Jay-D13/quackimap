@@ -682,7 +682,7 @@ Video and images here
 
 #### Real Duckiebot
 
-Video and images here
+It did not run.
 
 ### GTSAM-SLAM
 
