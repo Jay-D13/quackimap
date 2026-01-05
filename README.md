@@ -698,8 +698,7 @@ https://github.com/user-attachments/assets/178326a2-ecdb-4132-a80f-b099886fb60e
 
 #### Real Duckiebot
 
-Video and images here
-
+[gtsam_real.webm](https://github.com/user-attachments/assets/21c8f1e0-80cf-4f99-a901-785fc099619a)
 
 ## 6. Challenges & Lessons Learned
 
