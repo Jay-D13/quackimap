@@ -22,12 +22,13 @@ class MapSlam2D(object):
         self.landmark_ids = [] # list of tag_ids
         self.last_optimized_state = None
         self.last_optimized_landmark_ids = None
+        self.last_optimized_num_poses = None  # Add this
 
         # Noise parameters
-        self.sigma_odom_xy = 0.1      # meters (tune)
-        self.sigma_odom_theta = np.deg2rad(6.0)  # rad (tune)
-        self.sigma_range = 0.01        # meters (tune)
-        self.sigma_bearing = np.deg2rad(0.5)     # rad (tune)
+        self.sigma_odom_xy = 0.03      # meters (tune)
+        self.sigma_odom_theta = np.deg2rad(5.0)  # rad (tune)
+        self.sigma_range = 0.05        # meters (tune)
+        self.sigma_bearing = np.deg2rad(5.0)     # rad (tune)
 
     def add_pose(self, v, w, dt, detections):
         """
@@ -98,7 +99,7 @@ class MapSlam2D(object):
 
             self.poses.append(pose)
 
-            print(f"Added pose {len(self.poses)-1} with {len(detections)} detections.\n\n")
+            #print(f"Added pose {len(self.poses)-1} with {len(detections)} detections.\n\n")
 
     def get_state(self):
         """Get state vector: [x_1, y_1, theta_1, x_2, y_2, theta_2, ..., l1_x, l1_y, l2_x, l2_y, ...]^T as a first heuristic"""
@@ -336,6 +337,7 @@ class MapSlam2D(object):
                 
             self.last_optimized_state = state
             self.last_optimized_landmark_ids = self.landmark_ids[:num_landmarks]
+            self.last_optimized_num_poses = num_poses  # Store pose count used during optimization
 
         print("[MapSlam2D] Optimization finished.")
         return state
@@ -346,6 +348,53 @@ class MapSlam2D(object):
         except ValueError:
             idx = -1
         return idx
+
+    def get_all_landmarks(self):
+        """Return list of (tag_id, x, y) for all landmarks from optimized state."""
+        with self._lock:
+            if self.last_optimized_state is None or self.last_optimized_landmark_ids is None:
+                return []
+            
+            landmarks = []
+            num_poses = self.last_optimized_num_poses  # Use stored count, not current len(self.poses)
+            if num_poses is None:
+                return []
+            
+            state = np.asarray(self.last_optimized_state).ravel()
+            
+            for i, tag_id in enumerate(self.last_optimized_landmark_ids):
+                lm_base = 3 * num_poses + 2 * i
+                if lm_base + 1 >= state.size:
+                    break
+                x = float(state[lm_base])
+                y = float(state[lm_base + 1])
+                landmarks.append((tag_id, x, y))
+            
+            return landmarks
+    
+    def get_all_poses(self):
+        """Return list of (x, y, theta) for all poses from optimized state."""
+        with self._lock:
+            if self.last_optimized_state is None:
+                return []
+            
+            poses = []
+            num_poses = self.last_optimized_num_poses  # Use stored count
+            if num_poses is None:
+                return []
+            
+            state = np.asarray(self.last_optimized_state).ravel()
+            
+            for k in range(num_poses):
+                idx = 3 * k
+                if idx + 2 >= state.size:
+                    break
+                x = float(state[idx])
+                y = float(state[idx + 1])
+                theta = float(state[idx + 2])
+                poses.append((x, y, theta))
+            
+            return poses
 
     @staticmethod
     def _wrap_angle(a):
