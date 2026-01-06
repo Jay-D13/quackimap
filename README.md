@@ -615,7 +615,7 @@ These are set more conservatively (higher) than the other methods because:
 
 We used the `lx-kinematics-odometry` [8] wheel encoder odometry processed through `encoder_pose_node`:
 
-- Computes differential wheel rotations from encoder ticks: $\Delta\phi = \frac{\text{ticks} - \text{prev\_ticks}}{\text{resolution}} \cdot 2\pi$
+- Computes differential wheel rotations from encoder ticks: $\Delta\phi = \frac{\text{ticks} - \text{prev ticks}}{\text{resolution}} \cdot 2\pi$
 - Applies unicycle kinematics with wheel radius $R = 0.0318$ m and baseline $L = 0.11$ m
 - Publishes `nav_msgs/Odometry` with twist information for SLAM prediction
 
@@ -682,7 +682,7 @@ Video and images here
 
 #### Real Duckiebot
 
-It did not run.
+The code of the optimization was too heavy to run on the real robot.
 
 ### GTSAM-SLAM
 
