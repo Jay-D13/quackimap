@@ -677,7 +677,7 @@ https://github.com/Jay-D13/quackimap/blob/v3/docs/media/ekf_x8.mp4
 Our custom Gauss Newton optimizer demonstrated the batch optimization concept but revealed practical limitations for online use.
 
 #### Duckiematrix
-As mentioned earlier, our custom implementation does not online mapping but rather does a batch optimization via a ros service after multiple landmars/poses have been added. Here is an example of calling the service after half-map lap.
+As mentioned earlier, our custom implementation does not online mapping but rather does a batch optimization via a ros service after multiple landmarks/poses have been added. Here is an example of calling the service after a half-map lap.
 
 [map-slam-duckiematrix.webm](https://github.com/user-attachments/assets/3174a2f6-d7bd-4a91-8df8-d95c4a656da2)
 
