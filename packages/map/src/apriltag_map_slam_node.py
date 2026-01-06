@@ -114,8 +114,8 @@ class AprilTagMapSlamNode(object):
         """ 
 
         # Debug image publisher - shows detected AprilTags
-        self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
-        #self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
+        #self.debug_img_pub = rospy.Publisher("slam_debug_image/compressed", CompressedImage, queue_size=1)
+        self.debug_img_raw_pub = rospy.Publisher("slam_debug_image", Image, queue_size=1)
 
         # TF broadcaster for RViz visualization
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
@@ -142,69 +142,6 @@ class AprilTagMapSlamNode(object):
 
         rospy.loginfo(f"Got camera intrinsics fx={fx:.2f}, fy={fy:.2f}, cx={cx:.2f}, cy={cy:.2f}")
         self.camera_info_sub.unregister()
-
-    # ---------- GROUND TRUTH CALLBACK (Pose message) ----------
-    def gt_pose_cb(self, msg: Odometry):
-        """
-        Handle ground truth pose from gt_pose_visualizer_node.
-        Converts Pose to Odometry for RVIZ visualization.
-        """
-        current_time = rospy.Time.now()
-        
-        # Convert Pose to Odometry for RVIZ
-        gt_odom = Odometry()
-        gt_odom.header.stamp = current_time
-        gt_odom.header.frame_id = "map"
-        gt_odom.child_frame_id = "base_link_gt"
-        
-        gt_odom.pose.pose = msg
-        
-        # Estimate velocity from pose changes (optional, for twist field)
-        if self.last_gt_pose is not None and self.last_gt_time is not None:
-            dt = (current_time - self.last_gt_time).to_sec()
-            if dt > 0.001:
-                dx = msg.position.x - self.last_gt_pose.position.x
-                dy = msg.position.y - self.last_gt_pose.position.y
-                
-                # Get yaw from quaternion
-                qz = msg.orientation.z
-                qw = msg.orientation.w
-                yaw = 2.0 * np.arctan2(qz, qw)
-                
-                qz_prev = self.last_gt_pose.orientation.z
-                qw_prev = self.last_gt_pose.orientation.w
-                yaw_prev = 2.0 * np.arctan2(qz_prev, qw_prev)
-                
-                # Linear velocity in robot frame
-                dist = np.sqrt(dx**2 + dy**2)
-                gt_odom.twist.twist.linear.x = dist / dt
-                
-                # Angular velocity
-                dyaw = yaw - yaw_prev
-                # Wrap angle
-                while dyaw > np.pi:
-                    dyaw -= 2*np.pi
-                while dyaw < -np.pi:
-                    dyaw += 2*np.pi
-                gt_odom.twist.twist.angular.z = dyaw / dt
-        
-        self.last_gt_pose = msg
-        self.last_gt_time = current_time
-        
-        self.gt_odom_pub.publish(gt_odom)
-        
-        # Add to ground truth path
-        ps = PoseStamped()
-        ps.header.stamp = current_time
-        ps.header.frame_id = "map"
-        ps.pose = msg
-        
-        self.gt_path.poses.append(ps)
-        if len(self.gt_path.poses) > 1000:
-            self.gt_path.poses = self.gt_path.poses[-1000:]
-        
-        self.gt_path.header.stamp = current_time
-        self.gt_path_pub.publish(self.gt_path)
 
     # ---------- ODOMETRY -> PREDICT ----------
     def odom_cb(self, msg: Odometry): # TODO
@@ -252,6 +189,13 @@ class AprilTagMapSlamNode(object):
     # ---------- CAMERA IMAGE -> APRILTAG DETECTION -> UPDATE ----------
     def image_cb(self, msg: CompressedImage):
 
+        # Simple stride-based throttling: only process 1 out of `self.stride` images
+        self.image_counter += 1
+        if self.image_counter < self.stride:
+            return
+        # Reset counter when we actually process a frame
+        self.image_counter = 0
+        
         #TODO: THROTTLE THIS FUNCTION, ADDS TO MANY 
         if self.camera_params is None:
             rospy.logwarn_throttle(5.0, "Waiting for camera intrinsics...")
@@ -401,11 +345,18 @@ class AprilTagMapSlamNode(object):
         """Publish the debug image with detections drawn."""
         # Publish as compressed
         try:
+            """             
             msg = CompressedImage()
             msg.header.stamp = stamp
             msg.format = "jpeg"
             msg.data = np.array(cv2.imencode('.jpg', img)[1]).tobytes()
-            self.debug_img_pub.publish(msg)
+            self.debug_img_raw_pub.publish(msg)
+
+            """
+            raw_msg = self.bridge.cv2_to_imgmsg(img, encoding="bgr8")
+            raw_msg.header.stamp = stamp
+            self.debug_img_raw_pub.publish(raw_msg)
+
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"Error publishing compressed debug image: {e}")
 
